@@ -18,3 +18,6 @@ WARNING: This is a development server. Do not use it in a production deployment.
 Press CTRL+C to quit
 
 ## 4.打开浏览器访问：http://127.0.0.1:5000，即可访问
+
+# 数据库信息
+postgresql://123:123123@ye11ts688906.vicp.fun:38308/test_2
