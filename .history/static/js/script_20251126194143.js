@@ -157,7 +157,7 @@ function clearMarkers() {
 }
 
 
-// 列表展示
+// ====== 列表展示 ======
 function showResults(items, title) {
     const resultsDiv = document.getElementById('results');
     let html = `<h5>${title} <span class="badge bg-secondary">${items.length}</span></h5>`;
@@ -182,7 +182,7 @@ function showResults(items, title) {
 }
 
 
-// 范围查询(占位)
+// ====== 范围查询(占位) ======
 function startRangeQuery() {
     alert("范围查询功能开发中...请确保引入了高德 MouseTool 插件");
     // 如果需要实现，需要在 HTML head 中引入 plugin=AMap.MouseTool

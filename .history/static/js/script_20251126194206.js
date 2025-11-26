@@ -188,7 +188,7 @@ function startRangeQuery() {
     // 如果需要实现，需要在 HTML head 中引入 plugin=AMap.MouseTool
 }
 
-// 暴露函数给全局（防止 HTML onclick 找不到）
+// 暴露函数给全局
 window.searchByKeyword = searchByKeyword;
 window.clearMarkers = clearMarkers;
 window.startRangeQuery = startRangeQuery;

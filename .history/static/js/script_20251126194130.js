@@ -41,7 +41,7 @@ function initMap() {
 document.addEventListener('DOMContentLoaded', initMap);
 
 
-// 搜索
+// ====== 核心功能：搜索 ======
 function searchByKeyword() {
     const keywordInput = document.getElementById('keyword');
     const q = keywordInput.value.trim();
@@ -58,7 +58,7 @@ function searchByKeyword() {
     });
 }
 
-// 通用数据请求函数
+// ====== 通用数据请求函数 (调试版) ======
 function fetchData(query) {
     const url = `/api/search?q=${encodeURIComponent(query)}`;
 
@@ -81,7 +81,7 @@ function fetchData(query) {
         });
 }
 
-// 地图标记操作
+//地图标记操作
 function addMarkers(pois) {
     if (!map) return;
 
@@ -157,7 +157,7 @@ function clearMarkers() {
 }
 
 
-// 列表展示
+// ====== 列表展示 ======
 function showResults(items, title) {
     const resultsDiv = document.getElementById('results');
     let html = `<h5>${title} <span class="badge bg-secondary">${items.length}</span></h5>`;
@@ -182,7 +182,7 @@ function showResults(items, title) {
 }
 
 
-// 范围查询(占位)
+// ====== 范围查询(占位) ======
 function startRangeQuery() {
     alert("范围查询功能开发中...请确保引入了高德 MouseTool 插件");
     // 如果需要实现，需要在 HTML head 中引入 plugin=AMap.MouseTool

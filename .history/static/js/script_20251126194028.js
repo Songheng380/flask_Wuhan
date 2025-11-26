@@ -1,11 +1,11 @@
-// 全局变量
+// ====== 全局变量定义 ======
 let map = null;
 let infoWindow = null;
 let currentMarkers = []; 
 let rectangleTool = null;
 let isSelecting = false;
 
-// 初始化地图
+// ====== 初始化地图 ======
 function initMap() {
     try {
         // 确保 AMap 已加载
@@ -41,7 +41,7 @@ function initMap() {
 document.addEventListener('DOMContentLoaded', initMap);
 
 
-// 搜索
+// ====== 核心功能：搜索 ======
 function searchByKeyword() {
     const keywordInput = document.getElementById('keyword');
     const q = keywordInput.value.trim();
@@ -58,7 +58,7 @@ function searchByKeyword() {
     });
 }
 
-// 通用数据请求函数
+// ====== 通用数据请求函数 (调试版) ======
 function fetchData(query) {
     const url = `/api/search?q=${encodeURIComponent(query)}`;
 
@@ -70,18 +70,23 @@ function fetchData(query) {
             return response.json();
         })
         .then(data => {
-            console.log("后端返回的原始数据 (前1条):", data[0]);
+            console.log("🔥 后端返回的原始数据 (前1条):", data[0]); // 关键：看这里！
+            
+            // 1. 清除旧标记
             clearMarkers();
+            // 2. 添加新标记 (这一步最容易报错)
             addMarkers(data);
+            // 3. 更新列表
             showResults(data, query ? `"${query}" 的搜索结果` : '全部数据');
         })
         .catch(error => {
+            // 只有真正的严重错误才弹窗
             console.error("❌ 严重错误:", error);
             alert("发生错误: " + error.message);
         });
 }
 
-// 地图标记操作
+// ====== 地图标记操作 (防崩溃版) ======
 function addMarkers(pois) {
     if (!map) return;
 
@@ -91,15 +96,18 @@ function addMarkers(pois) {
 
     pois.forEach((poi, index) => {
         try {
+            // === 关键修改：自动尝试多种字段名 ===
+            // 有的数据库叫 lon，有的叫 lng，有的叫 x
             let rawLon = poi.lon || poi.lng || poi.x || poi.longitude;
             let rawLat = poi.lat || poi.y || poi.latitude;
 
             let lon = parseFloat(rawLon);
             let lat = parseFloat(rawLat);
 
+            // 检查转换后是否还是 NaN
             if (isNaN(lon) || isNaN(lat)) {
-                // 遇到坏数据时才在控制台警告
-                console.warn(`第 ${index} 条数据坐标无效 (lon:${rawLon}, lat:${rawLat})，已跳过。`);
+                // 只有遇到坏数据时才在控制台警告，不中断程序
+                console.warn('第 ${index} 条数据坐标无效 (lon:${rawLon}, lat:${rawLat})，已跳过。`);
                 return; 
             }
 
@@ -157,7 +165,7 @@ function clearMarkers() {
 }
 
 
-// 列表展示
+// ====== 列表展示 ======
 function showResults(items, title) {
     const resultsDiv = document.getElementById('results');
     let html = `<h5>${title} <span class="badge bg-secondary">${items.length}</span></h5>`;
@@ -182,7 +190,7 @@ function showResults(items, title) {
 }
 
 
-// 范围查询(占位)
+// ====== 范围查询(占位) ======
 function startRangeQuery() {
     alert("范围查询功能开发中...请确保引入了高德 MouseTool 插件");
     // 如果需要实现，需要在 HTML head 中引入 plugin=AMap.MouseTool
