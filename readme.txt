@@ -1,0 +1,20 @@
+
+1. 创建虚拟环境（推荐使用 Anaconda,如果不用，跳过这个直接下库）
+conda create -n flask-dev python=3.10
+# 激活虚拟环境
+conda activate flask-dev
+
+2.依赖库，若后来添加了库，请在这里记录
+pip install flask
+
+
+3.启动应用
+在终端输入python app.py
+出现以下内容
+ * Serving Flask app 'app'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on http://127.0.0.1:5000
+Press CTRL+C to quit
+
+4.打开浏览器访问：http://127.0.0.1:5000，即可访问
