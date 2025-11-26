@@ -1,11 +1,11 @@
-// 全局变量
+// ====== 全局变量定义 ======
 let map = null;
 let infoWindow = null;
 let currentMarkers = []; 
 let rectangleTool = null;
 let isSelecting = false;
 
-// 初始化地图
+// ====== 初始化地图 ======
 function initMap() {
     try {
         // 确保 AMap 已加载
@@ -41,7 +41,7 @@ function initMap() {
 document.addEventListener('DOMContentLoaded', initMap);
 
 
-// 搜索
+// ====== 核心功能：搜索 ======
 function searchByKeyword() {
     const keywordInput = document.getElementById('keyword');
     const q = keywordInput.value.trim();
@@ -58,8 +58,9 @@ function searchByKeyword() {
     });
 }
 
-// 通用数据请求函数
+// ====== 通用数据请求函数 ======
 function fetchData(query) {
+    // 这里的 url 需要和你后端 app.py 定义的路由一致
     const url = `/api/search?q=${encodeURIComponent(query)}`;
 
     return fetch(url)
@@ -70,75 +71,60 @@ function fetchData(query) {
             return response.json();
         })
         .then(data => {
-            console.log("后端返回的原始数据 (前1条):", data[0]);
+            console.log("获取数据成功，数量:", data.length);
+            // 1. 清除旧标记
             clearMarkers();
+            // 2. 添加新标记
             addMarkers(data);
+            // 3. 更新右侧/下方列表
             showResults(data, query ? `"${query}" 的搜索结果` : '全部数据');
         })
         .catch(error => {
-            console.error("❌ 严重错误:", error);
-            alert("发生错误: " + error.message);
+            console.error("搜索出错:", error);
+            alert("搜索失败，请检查后端服务是否启动，或按 F12 查看控制台错误信息。");
         });
 }
 
-// 地图标记操作
+
+// ====== 地图标记操作 ======
 function addMarkers(pois) {
     if (!map) return;
 
     let newMarkers = [];
-    let validBounds = new AMap.Bounds();
-    let hasValidData = false;
+    
+    pois.forEach(poi => {
+        // 防止脏数据导致报错 (例如经纬度缺失)
+        if (!poi.lon || !poi.lat) return;
 
-    pois.forEach((poi, index) => {
-        try {
-            let rawLon = poi.lon || poi.lng || poi.x || poi.longitude;
-            let rawLat = poi.lat || poi.y || poi.latitude;
+        const marker = new AMap.Marker({
+            position: [poi.lon, poi.lat],
+            title: poi.name,
+            map: map // 直接添加到地图
+        });
 
-            let lon = parseFloat(rawLon);
-            let lat = parseFloat(rawLat);
+        const content = `
+            <div style="padding:5px;">
+                <strong>${poi.name}</strong><br>
+                <span style="color:#666;font-size:12px;">${poi.type} | ${poi.district}</span>
+            </div>`;
 
-            if (isNaN(lon) || isNaN(lat)) {
-                // 遇到坏数据时才在控制台警告
-                console.warn(`第 ${index} 条数据坐标无效 (lon:${rawLon}, lat:${rawLat})，已跳过。`);
-                return; 
-            }
+        marker.on('click', () => {
+            infoWindow.setContent(content);
+            infoWindow.open(map, marker.getPosition());
+        });
 
-            const marker = new AMap.Marker({
-                position: [lon, lat],
-                title: poi.name,
-                map: map
-            });
-
-            // 内容展示防空判断
-            const name = poi.name || "无名称";
-            const type = poi.type || "未知类型";
-            const district = poi.district || "";
-
-            const content = `
-                <div style="padding:5px;">
-                    <strong>${name}</strong><br>
-                    <span style="color:#666;font-size:12px;">${type} | ${district}</span>
-                </div>`;
-
-            marker.on('click', () => {
-                infoWindow.setContent(content);
-                infoWindow.open(map, marker.getPosition());
-            });
-
-            newMarkers.push(marker);
-            validBounds.extend([lon, lat]);
-            hasValidData = true;
-
-        } catch (err) {
-            console.error(`第 ${index} 条数据创建标记失败:`, err);
-            // 捕获错误，保证循环继续执行，不会触发外部的 catch
-        }
+        newMarkers.push(marker);
     });
 
     currentMarkers = newMarkers;
 
-    if (hasValidData) {
-        map.setBounds(validBounds);
+    // 自动调整地图视野以包含所有点
+    if (pois.length > 0) {
+        const bounds = new AMap.Bounds();
+        pois.forEach(p => {
+            if(p.lon && p.lat) bounds.extend([p.lon, p.lat]);
+        });
+        map.setBounds(bounds);
     }
 }
 
@@ -157,7 +143,7 @@ function clearMarkers() {
 }
 
 
-// 列表展示
+// ====== 列表展示 ======
 function showResults(items, title) {
     const resultsDiv = document.getElementById('results');
     let html = `<h5>${title} <span class="badge bg-secondary">${items.length}</span></h5>`;
@@ -182,7 +168,7 @@ function showResults(items, title) {
 }
 
 
-// 范围查询(占位)
+// ====== 范围查询(占位) ======
 function startRangeQuery() {
     alert("范围查询功能开发中...请确保引入了高德 MouseTool 插件");
     // 如果需要实现，需要在 HTML head 中引入 plugin=AMap.MouseTool
