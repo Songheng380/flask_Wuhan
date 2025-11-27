@@ -1,0 +1,11 @@
+# 忽略 JetBrains IDE（PyCharm/IDEA）配置文件
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# 之前提到的Python相关忽略（保留，避免冗余文件）
+__pycache__/
+.env
+*.pyc
+instance/
