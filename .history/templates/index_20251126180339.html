@@ -3,10 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <title>武汉市数据管理系统 - 高德地图版</title>
-    <!-- 引入 Bootstrap -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- 引入自定义 CSS (使用 url_for) -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        #container { height: 500px; margin-top: 10px; }
+        .query-panel { background: #f8f9fa; padding: 15px; border-radius: 5px; }
+        .result-item { border-bottom: 1px solid #eee; padding: 6px 0; }
+        .status-hint {
+            font-size: 0.875rem;
+            color: #e67700;
+            margin-top: 6px;
+        }
+    </style>
 </head>
 <body>
 <div class="container mt-4">
@@ -43,11 +50,7 @@
     <div class="mt-4" id="results"></div>
 </div>
 
-<!-- 1. 先引入高德地图 JS API (保持不变) -->
-<script src="https://webapi.amap.com/maps?v=2.0&key=7c0ba95a8d12a0dc0acf27f7772702ac"></script>
-
-<!-- 2. 再引入自定义 JS (使用 url_for) -->
-<script src="{{ url_for('static', filename='js/script.js') }}"></script>
-
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</script>
 </body>
 </html>

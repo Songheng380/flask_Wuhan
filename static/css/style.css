@@ -1,0 +1,125 @@
+/* =========================================
+   1. 全局布局调整
+   ========================================= */
+body {
+    margin: 0;
+    padding: 0;
+    /* 关键修改：原来是 max-width: 580px，这会导致地图非常窄。
+       改为 100% 或 auto，让 Bootstrap 的 .container 来控制布局 */
+    max-width: 100%; 
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    color: #333;
+}
+
+/* =========================================
+   2. 地图应用专用样式 (新添加部分)
+   ========================================= */
+/* 地图容器 */
+#container { 
+    height: 600px; /* 稍微加大高度，视野更好 */
+    width: 100%;
+    margin-top: 10px; 
+    border: 1px solid #ddd; /* 加个淡边框更精致 */
+    border-radius: 4px;
+}
+
+/* 左侧查询面板 */
+.query-panel { 
+    background: #f8f9fa; 
+    padding: 15px; 
+    border-radius: 8px; /* 圆角稍微大一点 */
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05); /* 加一点阴影增加立体感 */
+    margin-bottom: 15px;
+}
+
+/* 查询结果列表项 */
+.result-item { 
+    border-bottom: 1px solid #eee; 
+    padding: 10px 5px; /* 增加一点内边距 */
+    transition: background-color 0.2s;
+}
+
+.result-item:hover {
+    background-color: #f1f3f5;
+    cursor: pointer;
+}
+
+/* 状态提示文字 */
+.status-hint {
+    font-size: 0.875rem;
+    color: #e67700;
+    margin-top: 8px;
+    font-weight: bold;
+}
+
+/* =========================================
+   3. 旧样式兼容区 
+   (如果你不再需要电影列表功能，下面这些都可以删除)
+   ========================================= */
+
+/* 页脚 */
+footer {
+    color: #888;
+    margin-top: 30px;
+    text-align: center;
+    padding: 20px;
+    border-top: 1px solid #eee;
+}
+
+/* 头像 */
+.avatar {
+    width: 40px;
+    border-radius: 50%; /* 加上圆角更好看 */
+}
+
+/* 导航栏 (Nav) - 稍微调整以兼容 Bootstrap */
+nav ul {
+    list-style-type: none;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background-color: #333;
+    margin-bottom: 20px; /* 增加底部间距 */
+}
+
+nav li {
+    float: left;
+}
+
+nav li a {
+    display: block;
+    color: white;
+    text-align: center;
+    padding: 14px 16px;
+    text-decoration: none;
+}
+
+nav li a:hover {
+    background-color: #111;
+    color: #fff;
+}
+
+/* 电影列表 */
+.movie-list {
+    list-style-type: none;
+    padding: 0;
+    margin-bottom: 10px;
+    /* 移除可能影响布局的阴影，交给 Bootstrap 处理 */
+}
+
+.movie-list li {
+    padding: 12px 24px;
+    border-bottom: 1px solid #ddd;
+}
+
+.movie-list li:hover {
+    background-color: #f8f9fa;
+}
+
+/* 龙猫图片 */
+.totoro {
+    display: block;
+    margin: 0 auto;
+    height: 100px;
+}
