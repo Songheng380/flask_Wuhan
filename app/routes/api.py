@@ -1,9 +1,16 @@
 # app/routes/api.py
 from flask import Blueprint, request, jsonify, current_app
-from app.models.metro_station import MetroStation
 from app import db
 from sqlalchemy.exc import OperationalError
 import json
+from geoalchemy2 import Geometry
+from sqlalchemy import func
+
+# 数据模型
+from app.models.metro_station import MetroStation
+from app.models.public_services import PublicServices
+from app.models.wuhan_middle_school import WuhanMiddleSchool
+from app.models.wuhan_primary_school import WuhanPrimarySchool
 
 api = Blueprint('api', __name__)
 
@@ -101,38 +108,480 @@ def test_db_connection():
         )
         return response
 
-# 根据 gid 查询单个地铁站详情
-@api.route('/metro/<int:gid>', methods=['GET'])
-def get_metro_by_gid(gid):
-    """根据 gid 查询单个地铁站点详情"""
-    # 按 gid 查询（主键查询，效率最高）
-    station = db.session.query(
-        MetroStation.gid,
-        MetroStation.name,
-        MetroStation.layer,
-        db.func.ST_X(MetroStation.geom).label('lon'),
-        db.func.ST_Y(MetroStation.geom).label('lat'),
-        MetroStation.desc_,  # 站点描述
-        MetroStation.style    # 样式字段（如果有用）
-    ).filter(MetroStation.gid == gid).first()
+# -------------------------- Public Services 接口 --------------------------
+@api.route('/publicservices/search', methods=['GET'])
+def publicservices_search():
+    keyword = request.args.get('q', '').strip().lower()
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('pageSize', 15, type=int)
+    offset = (page - 1) * page_size
 
-    # 处理查询结果：不存在返回 404
-    if not station:
-        return jsonify({
-            "code": 404,
-            "msg": f"未找到 gid 为 {gid} 的地铁站点"
-        }), 404
+    query = db.session.query(
+        PublicServices.fid, PublicServices.name, PublicServices.type,
+        PublicServices.address, PublicServices.longitude, PublicServices.latitude,
+        PublicServices.category
+    )
+    if keyword:
+        query = query.filter(
+            (func.lower(PublicServices.name).ilike(f'%{keyword}%')) |
+            (func.lower(PublicServices.type).ilike(f'%{keyword}%')) |
+            (func.lower(PublicServices.address).ilike(f'%{keyword}%'))
+        )
 
-    # 转换为 JSON 格式返回（字段更完整）
+    total = query.count()
+    results = query.limit(page_size).offset(offset).all()
+
+    data_list = [
+        {
+            "fid": item.fid,
+            "name": item.name,
+            "type": item.type,
+            "address": item.address,
+            "longitude": round(float(item.longitude), 6) if item.longitude else None,
+            "latitude": round(float(item.latitude), 6) if item.latitude else None,
+            "category": item.category
+        } for item in results
+    ]
+    return jsonify({"data": data_list, "total": total, "page": page, "pageSize": page_size})
+
+
+@api.route('/publicservices/<int:fid>', methods=['GET'])
+def publicservices_get(fid):
+    item = PublicServices.query.get(fid)
+    if not item:
+        return jsonify({"code": 404, "msg": f"Not found public service with fid={fid}"}), 404
     return jsonify({
         "code": 200,
         "data": {
-            "gid": station.gid,
-            "name": station.name,
-            "line": station.layer,  # 线路名称（如“轨道交通2号线”）
-            "lon": round(station.lon, 6),  # 经度（保留6位小数，更精确）
-            "lat": round(station.lat, 6),  # 纬度
-            "description": station.desc_ or "无描述",  # 描述（为空时显示默认值）
-            "style": station.style or "无"  # 样式字段（可选）
+            "fid": item.fid,
+            "name": item.name,
+            "type": item.type,
+            "address": item.address,
+            "longitude": float(item.longitude) if item.longitude else None,
+            "latitude": float(item.latitude) if item.latitude else None,
+            "category": item.category,
+            "gridcode": item.gridcode,
+            "typecode": item.typecode
         }
-    }), 200
+    })
+
+
+@api.route('/publicservices', methods=['POST'])
+def publicservices_add():
+    data = request.get_json()
+    required = ['name', 'type', 'longitude', 'latitude']
+    if not all(k in data for k in required):
+        return jsonify({"code": 400, "msg": "Missing required fields (name/type/longitude/latitude)"}), 400
+
+    try:
+        lon = float(data['longitude'])
+        lat = float(data['latitude'])
+        # 空间函数正常使用：func 从 sqlalchemy 导入，兼容 geoalchemy2 空间函数
+        geometry = func.ST_SetSRID(func.ST_MakePoint(lon, lat), 4326)
+
+        new_item = PublicServices(
+            name=data['name'],
+            type=data['type'],
+            address=data.get('address'),
+            longitude=lon,
+            latitude=lat,
+            category=data.get('category'),
+            gridcode=data.get('gridcode'),
+            typecode=data.get('typecode'),
+            geometry=geometry
+        )
+        db.session.add(new_item)
+        db.session.commit()
+        return jsonify({"code": 200, "msg": "Add public service successfully", "data": {"fid": new_item.fid}})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"code": 500, "msg": f"Failed to add public service: {str(e)}"}), 500
+
+
+@api.route('/publicservices/<int:fid>', methods=['PUT'])
+def publicservices_update(fid):
+    item = PublicServices.query.get(fid)
+    if not item:
+        return jsonify({"code": 404, "msg": "Public service not found"}), 404
+    data = request.get_json()
+
+    try:
+        item.name = data.get('name', item.name)
+        item.type = data.get('type', item.type)
+        item.address = data.get('address', item.address)
+        if 'longitude' in data and 'latitude' in data:
+            lon = float(data['longitude'])
+            lat = float(data['latitude'])
+            item.longitude = lon
+            item.latitude = lat
+            item.geometry = func.ST_SetSRID(func.ST_MakePoint(lon, lat), 4326)
+        db.session.commit()
+        return jsonify({"code": 200, "msg": "Update public service successfully"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"code": 500, "msg": f"Failed to update public service: {str(e)}"}), 500
+
+
+@api.route('/publicservices/<int:fid>', methods=['DELETE'])
+def publicservices_delete(fid):
+    item = PublicServices.query.get(fid)
+    if not item:
+        return jsonify({"code": 404, "msg": "Public service not found"}), 404
+    try:
+        db.session.delete(item)
+        db.session.commit()
+        return jsonify({"code": 200, "msg": "Delete public service successfully"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"code": 500, "msg": f"Failed to delete public service: {str(e)}"}), 500
+
+
+# -------------------------- Wuhan Metro Stations 接口 --------------------------
+@api.route('/wuhanmetro/search', methods=['GET'])
+def wuhanmetro_search():
+    keyword = request.args.get('q', '').strip().lower()
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('pageSize', 15, type=int)
+    offset = (page - 1) * page_size
+
+    query = db.session.query(
+        MetroStation.ogc_fid, MetroStation.name, MetroStation.line,
+        MetroStation.color, MetroStation.lon_wgs84, MetroStation.lat_wgs84,
+        MetroStation.transfer
+    )
+    if keyword:
+        query = query.filter(
+            (func.lower(MetroStation.name).ilike(f'%{keyword}%')) |
+            (func.lower(MetroStation.line).ilike(f'%{keyword}%'))
+        )
+
+    total = query.count()
+    results = query.limit(page_size).offset(offset).all()
+
+    data_list = [
+        {
+            "ogc_fid": item.ogc_fid,
+            "name": item.name,
+            "line": item.line,
+            "color": item.color,
+            "lon_wgs84": round(float(item.lon_wgs84), 6) if item.lon_wgs84 else None,
+            "lat_wgs84": round(float(item.lat_wgs84), 6) if item.lat_wgs84 else None,
+            "transfer": item.transfer
+        } for item in results
+    ]
+    return jsonify({"data": data_list, "total": total, "page": page, "pageSize": page_size})
+
+
+@api.route('/wuhanmetro/<int:ogc_fid>', methods=['GET'])
+def wuhanmetro_get(ogc_fid):
+    item = MetroStation.query.get(ogc_fid)
+    if not item:
+        return jsonify({"code": 404, "msg": f"Not found metro station with ID={ogc_fid}"}), 404
+    return jsonify({
+        "code": 200,
+        "data": {
+            "ogc_fid": item.ogc_fid,
+            "name": item.name,
+            "line": item.line,
+            "color": item.color,
+            "lon_wgs84": float(item.lon_wgs84) if item.lon_wgs84 else None,
+            "lat_wgs84": float(item.lat_wgs84) if item.lat_wgs84 else None,
+            "transfer": item.transfer
+        }
+    })
+
+
+@api.route('/wuhanmetro', methods=['POST'])
+def wuhanmetro_add():
+    data = request.get_json()
+    required = ['name', 'line', 'lon_wgs84', 'lat_wgs84']
+    if not all(k in data for k in required):
+        return jsonify({"code": 400, "msg": "Missing required fields (name/line/lon_wgs84/lat_wgs84)"}), 400
+
+    try:
+        lon = float(data['lon_wgs84'])
+        lat = float(data['lat_wgs84'])
+        geometry = func.ST_SetSRID(func.ST_MakePoint(lon, lat), 4326)
+
+        new_item = MetroStation(
+            name=data['name'],
+            line=data['line'],
+            color=data.get('color'),
+            lon_wgs84=lon,
+            lat_wgs84=lat,
+            transfer=data.get('transfer'),
+            geometry=geometry
+        )
+        db.session.add(new_item)
+        db.session.commit()
+        return jsonify({"code": 200, "msg": "Add metro station successfully", "data": {"ogc_fid": new_item.ogc_fid}})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"code": 500, "msg": f"Failed to add metro station: {str(e)}"}), 500
+
+
+@api.route('/wuhanmetro/<int:ogc_fid>', methods=['PUT'])
+def wuhanmetro_update(ogc_fid):
+    item = MetroStation.query.get(ogc_fid)
+    if not item:
+        return jsonify({"code": 404, "msg": "Metro station not found"}), 404
+    data = request.get_json()
+
+    try:
+        item.name = data.get('name', item.name)
+        item.line = data.get('line', item.line)
+        item.color = data.get('color', item.color)
+        item.transfer = data.get('transfer', item.transfer)
+        if 'lon_wgs84' in data and 'lat_wgs84' in data:
+            lon = float(data['lon_wgs84'])
+            lat = float(data['lat_wgs84'])
+            item.lon_wgs84 = lon
+            item.lat_wgs84 = lat
+            item.geometry = func.ST_SetSRID(func.ST_MakePoint(lon, lat), 4326)
+        db.session.commit()
+        return jsonify({"code": 200, "msg": "Update metro station successfully"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"code": 500, "msg": f"Failed to update metro station: {str(e)}"}), 500
+
+
+@api.route('/wuhanmetro/<int:ogc_fid>', methods=['DELETE'])
+def wuhanmetro_delete(ogc_fid):
+    item = MetroStation.query.get(ogc_fid)
+    if not item:
+        return jsonify({"code": 404, "msg": "Metro station not found"}), 404
+    try:
+        db.session.delete(item)
+        db.session.commit()
+        return jsonify({"code": 200, "msg": "Delete metro station successfully"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"code": 500, "msg": f"Failed to delete metro station: {str(e)}"}), 500
+
+
+# -------------------------- Wuhan Middle Schools 接口 --------------------------
+@api.route('/wuhanmiddleschool/search', methods=['GET'])
+def wuhanmiddleschool_search():
+    keyword = request.args.get('q', '').strip().lower()
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('pageSize', 15, type=int)
+    offset = (page - 1) * page_size
+
+    query = db.session.query(
+        WuhanMiddleSchool.ogc_fid, WuhanMiddleSchool.name, WuhanMiddleSchool.related_address,
+        WuhanMiddleSchool.x_transfer, WuhanMiddleSchool.y_transfer
+    )
+    if keyword:
+        query = query.filter(
+            (func.lower(WuhanMiddleSchool.name).ilike(f'%{keyword}%')) |
+            (func.lower(WuhanMiddleSchool.related_address).ilike(f'%{keyword}%'))
+        )
+
+    total = query.count()
+    results = query.limit(page_size).offset(offset).all()
+
+    data_list = [
+        {
+            "ogc_fid": item.ogc_fid,
+            "name": item.name,
+            "related_address": item.related_address,
+            "x_transfer": round(float(item.x_transfer), 6) if item.x_transfer else None,
+            "y_transfer": round(float(item.y_transfer), 6) if item.y_transfer else None
+        } for item in results
+    ]
+    return jsonify({"data": data_list, "total": total, "page": page, "pageSize": page_size})
+
+
+@api.route('/wuhanmiddleschool/<int:ogc_fid>', methods=['GET'])
+def wuhanmiddleschool_get(ogc_fid):
+    item = WuhanMiddleSchool.query.get(ogc_fid)
+    if not item:
+        return jsonify({"code": 404, "msg": f"Not found middle school with ID={ogc_fid}"}), 404
+    return jsonify({
+        "code": 200,
+        "data": {
+            "ogc_fid": item.ogc_fid,
+            "name": item.name,
+            "related_address": item.related_address,
+            "x_transfer": float(item.x_transfer) if item.x_transfer else None,
+            "y_transfer": float(item.y_transfer) if item.y_transfer else None
+        }
+    })
+
+
+@api.route('/wuhanmiddleschool', methods=['POST'])
+def wuhanmiddleschool_add():
+    data = request.get_json()
+    required = ['name', 'x_transfer', 'y_transfer']
+    if not all(k in data for k in required):
+        return jsonify({"code": 400, "msg": "Missing required fields (name/x_transfer/y_transfer)"}), 400
+
+    try:
+        x = float(data['x_transfer'])
+        y = float(data['y_transfer'])
+        geometry = func.ST_SetSRID(func.ST_MakePoint(x, y), 4326)
+
+        new_item = WuhanMiddleSchool(
+            name=data['name'],
+            related_address=data.get('related_address'),
+            x_transfer=x,
+            y_transfer=y,
+            geometry=geometry
+        )
+        db.session.add(new_item)
+        db.session.commit()
+        return jsonify({"code": 200, "msg": "Add middle school successfully", "data": {"ogc_fid": new_item.ogc_fid}})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"code": 500, "msg": f"Failed to add middle school: {str(e)}"}), 500
+
+
+@api.route('/wuhanmiddleschool/<int:ogc_fid>', methods=['PUT'])
+def wuhanmiddleschool_update(ogc_fid):
+    item = WuhanMiddleSchool.query.get(ogc_fid)
+    if not item:
+        return jsonify({"code": 404, "msg": "Middle school not found"}), 404
+    data = request.get_json()
+
+    try:
+        item.name = data.get('name', item.name)
+        item.related_address = data.get('related_address', item.related_address)
+        if 'x_transfer' in data and 'y_transfer' in data:
+            x = float(data['x_transfer'])
+            y = float(data['y_transfer'])
+            item.x_transfer = x
+            item.y_transfer = y
+            item.geometry = func.ST_SetSRID(func.ST_MakePoint(x, y), 4326)
+        db.session.commit()
+        return jsonify({"code": 200, "msg": "Update middle school successfully"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"code": 500, "msg": f"Failed to update middle school: {str(e)}"}), 500
+
+
+@api.route('/wuhanmiddleschool/<int:ogc_fid>', methods=['DELETE'])
+def wuhanmiddleschool_delete(ogc_fid):
+    item = WuhanMiddleSchool.query.get(ogc_fid)
+    if not item:
+        return jsonify({"code": 404, "msg": "Middle school not found"}), 404
+    try:
+        db.session.delete(item)
+        db.session.commit()
+        return jsonify({"code": 200, "msg": "Delete middle school successfully"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"code": 500, "msg": f"Failed to delete middle school: {str(e)}"}), 500
+
+
+# -------------------------- Wuhan Primary Schools 接口 --------------------------
+@api.route('/wuhanprimaryschool/search', methods=['GET'])
+def wuhanprimaryschool_search():
+    keyword = request.args.get('q', '').strip().lower()
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('pageSize', 15, type=int)
+    offset = (page - 1) * page_size
+
+    query = db.session.query(
+        WuhanPrimarySchool.ogc_fid, WuhanPrimarySchool.name, WuhanPrimarySchool.related_address,
+        WuhanPrimarySchool.x_transfer, WuhanPrimarySchool.y_transfer
+    )
+    if keyword:
+        query = query.filter(
+            (func.lower(WuhanPrimarySchool.name).ilike(f'%{keyword}%')) |
+            (func.lower(WuhanPrimarySchool.related_address).ilike(f'%{keyword}%'))
+        )
+
+    total = query.count()
+    results = query.limit(page_size).offset(offset).all()
+
+    data_list = [
+        {
+            "ogc_fid": item.ogc_fid,
+            "name": item.name,
+            "related_address": item.related_address,
+            "x_transfer": round(float(item.x_transfer), 6) if item.x_transfer else None,
+            "y_transfer": round(float(item.y_transfer), 6) if item.y_transfer else None
+        } for item in results
+    ]
+    return jsonify({"data": data_list, "total": total, "page": page, "pageSize": page_size})
+
+
+@api.route('/wuhanprimaryschool/<int:ogc_fid>', methods=['GET'])
+def wuhanprimaryschool_get(ogc_fid):
+    item = WuhanPrimarySchool.query.get(ogc_fid)
+    if not item:
+        return jsonify({"code": 404, "msg": f"Not found primary school with ID={ogc_fid}"}), 404
+    return jsonify({
+        "code": 200,
+        "data": {
+            "ogc_fid": item.ogc_fid,
+            "name": item.name,
+            "related_address": item.related_address,
+            "x_transfer": float(item.x_transfer) if item.x_transfer else None,
+            "y_transfer": float(item.y_transfer) if item.y_transfer else None
+        }
+    })
+
+
+@api.route('/wuhanprimaryschool', methods=['POST'])
+def wuhanprimaryschool_add():
+    data = request.get_json()
+    required = ['name', 'x_transfer', 'y_transfer']
+    if not all(k in data for k in required):
+        return jsonify({"code": 400, "msg": "Missing required fields (name/x_transfer/y_transfer)"}), 400
+
+    try:
+        x = float(data['x_transfer'])
+        y = float(data['y_transfer'])
+        geometry = func.ST_SetSRID(func.ST_MakePoint(x, y), 4326)
+
+        new_item = WuhanPrimarySchool(
+            name=data['name'],
+            related_address=data.get('related_address'),
+            x_transfer=x,
+            y_transfer=y,
+            geometry=geometry
+        )
+        db.session.add(new_item)
+        db.session.commit()
+        return jsonify({"code": 200, "msg": "Add primary school successfully", "data": {"ogc_fid": new_item.ogc_fid}})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"code": 500, "msg": f"Failed to add primary school: {str(e)}"}), 500
+
+
+@api.route('/wuhanprimaryschool/<int:ogc_fid>', methods=['PUT'])
+def wuhanprimaryschool_update(ogc_fid):
+    item = WuhanPrimarySchool.query.get(ogc_fid)
+    if not item:
+        return jsonify({"code": 404, "msg": "Primary school not found"}), 404
+    data = request.get_json()
+
+    try:
+        item.name = data.get('name', item.name)
+        item.related_address = data.get('related_address', item.related_address)
+        if 'x_transfer' in data and 'y_transfer' in data:
+            x = float(data['x_transfer'])
+            y = float(data['y_transfer'])
+            item.x_transfer = x
+            item.y_transfer = y
+            item.geometry = func.ST_SetSRID(func.ST_MakePoint(x, y), 4326)
+        db.session.commit()
+        return jsonify({"code": 200, "msg": "Update primary school successfully"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"code": 500, "msg": f"Failed to update primary school: {str(e)}"}), 500
+
+
+@api.route('/wuhanprimaryschool/<int:ogc_fid>', methods=['DELETE'])
+def wuhanprimaryschool_delete(ogc_fid):
+    item = WuhanPrimarySchool.query.get(ogc_fid)
+    if not item:
+        return jsonify({"code": 404, "msg": "Primary school not found"}), 404
+    try:
+        db.session.delete(item)
+        db.session.commit()
+        return jsonify({"code": 200, "msg": "Delete primary school successfully"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"code": 500, "msg": f"Failed to delete primary school: {str(e)}"}), 500
