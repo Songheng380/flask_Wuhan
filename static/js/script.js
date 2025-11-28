@@ -6,6 +6,31 @@ let currentLayerName = null;
 let currentLayerData = null;  // 当前图层的 GeoJSON
 let resultMarkers = [];
 
+// 统一更新“查询结果”右上角的统计信息
+function updateStats(sourceLabel, data) {
+    const statEl = document.getElementById('resultStats');
+    if (!statEl) return;  // 防止页面上没有该元素时报错
+
+    const count = (data && typeof data.count === 'number')
+        ? data.count
+        : (data && typeof data.length === 'number'
+            ? data.length
+            : 0);
+
+    const elapsed = (data && typeof data.elapsed_ms === 'number')
+        ? data.elapsed_ms.toFixed(2)
+        : '—';
+
+    statEl.textContent = `${sourceLabel} | ${count} 条 | ${elapsed} ms`;
+}
+
+// 查询开始时的提示
+function showQueryLoading(label) {
+    const statEl = document.getElementById('resultStats');
+    if (!statEl) return;
+    statEl.textContent = `${label}中...`;
+}
+
 // 初始化 Leaflet 地图
 function initMap() {
     map = L.map('map');
@@ -150,17 +175,31 @@ function searchByKeyword(){
     // 如果选中了矢量图层，从该图层中查询
     if(currentLayerData && currentLayerData.features){
         const mode = document.querySelector('input[name="queryMode"]:checked').value;
+
+        // 查询开始提示
+        showQueryLoading('属性查询');
+
+        const t0 = performance.now();
+
         const results = currentLayerData.features.filter(feature => {
             if(!feature.properties) return false;
             const props = feature.properties;
-            
+
             if(mode === 'exact'){
                 return Object.values(props).some(v => String(v).toLowerCase() === kw.toLowerCase());
             } else {
                 return Object.values(props).some(v => String(v).toLowerCase().includes(kw.toLowerCase()));
             }
         });
-        
+
+        const elapsed = performance.now() - t0;
+
+        // 更新耗时和条数（前端统计）
+        updateStats('属性查询', {
+            count: results.length,
+            elapsed_ms: elapsed
+        });
+
         displayLayerSearchResults(results, kw);
     } else if(currentLayerName && currentLayerName !== '__none__'){
         alert('当前图层不支持查询或未完全加载，请选择矢量图层');
@@ -242,6 +281,11 @@ function displayLayerSearchResults(features, keyword){
 // 清除结果
 function clearResults(){
     document.getElementById('results').innerHTML = '<div class="text-muted">未执行查询</div>';
+
+    const statEl = document.getElementById('resultStats');
+    if (statEl) {
+        statEl.textContent = '未执行查询';
+    }
 }
 
 // 框选查询
@@ -303,12 +347,17 @@ function startBoxSelect(){
         
         // 在当前图层中执行范围查询
         if(currentLayerData && currentLayerData.features){
+
+            showQueryLoading('范围查询');
+
+            const t0 = performance.now();
+
             const results = currentLayerData.features.filter(feature => {
                 if(!feature.geometry) return false;
-                
+
                 const geomType = feature.geometry.type;
                 const coords = feature.geometry.coordinates;
-                
+
                 if(geomType === 'Point'){
                     // Point: [lon, lat]
                     const lon = coords[0];
@@ -323,6 +372,15 @@ function startBoxSelect(){
                 }
                 return false;
             });
+
+            const elapsed = performance.now() - t0;
+
+            // 更新耗时和条数（前端统计）
+            updateStats('范围查询', {
+                count: results.length,
+                elapsed_ms: elapsed
+            });
+
             displayLayerSearchResults(results, '矩形范围内');
         }
         

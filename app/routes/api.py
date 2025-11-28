@@ -3,6 +3,7 @@ from app import db
 from sqlalchemy.exc import OperationalError
 import json
 import os
+import time
 from pathlib import Path
 from geoalchemy2 import Geometry
 from sqlalchemy import func
@@ -177,13 +178,18 @@ def search_poi(POI_DATA=None, keyword=None, FIELDS=SearchConfig.FIELDS):
     1. 精确查询 exact=true
     2. 模糊查询 exact=false
     3. 语义查询 mode=semantic
+    返回：匹配到的 POI 列表（不再 jsonify）
     """
     if SearchConfig.DEBUG_POI_SEARCH:
         POI_DATA = load_poi_data()
 
-    keyword = request.args.get("q", "").strip().lower()
+    # 优先使用传入的 keyword，没有的话再从请求里取
+    if keyword is None:
+        keyword = request.args.get("q", "")
+    keyword = keyword.strip().lower()
+
     if not keyword:
-        return jsonify([])
+        return []
 
     exact = request.args.get("exact", "false").lower() == "true"
     mode = request.args.get("mode", "text").lower()  # text / semantic
@@ -192,7 +198,7 @@ def search_poi(POI_DATA=None, keyword=None, FIELDS=SearchConfig.FIELDS):
         print("✅ 进行语义查询")
         query_vector = vectorize_text(keyword, word_vectors=WORD_VECTORS)
         if query_vector is None:
-            return jsonify([])
+            return []
 
         results = []
         for item in POI_DATA:
@@ -205,22 +211,22 @@ def search_poi(POI_DATA=None, keyword=None, FIELDS=SearchConfig.FIELDS):
             results.append((sim, item))
         # 按相似度排序
         results.sort(key=lambda x: x[0], reverse=True)
-        results = [x[1] for x in results[:SearchConfig.searchListNum]]  # 可选：返回前10条
+        results = [x[1] for x in results[:SearchConfig.searchListNum]]
     else:
         if exact:
-            print("✅ 进行精确查询")
+            print(" 进行精确查询")
             results = [
                 item for item in POI_DATA
                 if any(keyword == str(item.get(field, "")).lower() for field in FIELDS)
             ]
         else:
-            print("✅ 进行模糊查询")
+            print(" 进行模糊查询")
             results = [
                 item for item in POI_DATA
                 if any(keyword in str(item.get(field, "")).lower() for field in FIELDS)
             ]
 
-    return jsonify(results)
+    return results
 
 
 # ========================== 矢量图层中的查询接口 ==========================
@@ -233,39 +239,55 @@ def search_layer():
     - q: 关键词
     - exact: 是否精确查询（默认模糊）
     """
+    t0 = time.perf_counter()
+
     layer_name = request.args.get('layer', '').strip()
     keyword = request.args.get('q', '').strip().lower()
     exact = request.args.get('exact', 'false').lower() == 'true'
-    
+
     if not layer_name or not keyword:
-        return jsonify([]), 400
-    
+        return jsonify({
+            "count": 0,
+            "elapsed_ms": 0.0,
+            "results": []
+        }), 400
+
     # 获取图层数据
     info = LAYERS.get(layer_name)
     if not info or info.get('type') != 'vector':
-        return jsonify({"error": "Layer not found or not a vector layer"}), 404
-    
+        return jsonify({
+            "error": "Layer not found or not a vector layer",
+            "count": 0,
+            "elapsed_ms": 0.0,
+            "results": []
+        }), 404
+
     geojson = info.get('geojson', {})
     features = geojson.get('features', [])
-    
+
     # 执行查询
     results = []
     for feature in features:
         if not feature.get('properties'):
             continue
-        props = feature.properties
-        
+        props = feature["properties"]  # 注意这里用下标访问
+
         # 在所有属性中查找匹配
-        matched = False
         if exact:
             matched = any(keyword == str(props.get(k, '')).lower() for k in props)
         else:
             matched = any(keyword in str(props.get(k, '')).lower() for k in props)
-        
+
         if matched:
             results.append(feature)
-    
-    return jsonify(results)
+
+    elapsed_ms = (time.perf_counter() - t0) * 1000.0
+
+    return jsonify({
+        "count": len(results),
+        "elapsed_ms": round(elapsed_ms, 3),
+        "results": results
+    })
     
 # 接收矩形框参数
 def get_bbox_params():
@@ -289,6 +311,8 @@ def get_bbox_params():
 # 矩形范围查询
 @api.route('/search')
 def bbox_query():
+    t0 = time.perf_counter()
+
     # 加载 POI 测试数据
     POI_DATA = load_poi_data() if SearchConfig.DEBUG else []
 
@@ -296,7 +320,7 @@ def bbox_query():
     coords = get_bbox_params()
     print(coords)
     if coords:
-        print("✅ 进行矩形范围过滤")
+        print("进行矩形范围过滤")
         min_lon, min_lat, max_lon, max_lat = coords
         filtered = [
             item for item in POI_DATA
@@ -306,11 +330,17 @@ def bbox_query():
     else:
         filtered = POI_DATA
 
-    # 关键字搜索
+    # 关键字搜索（传给 search_poi，不让它自己再读 request）
     keyword = request.args.get("q", "").strip().lower()
-    result = search_poi(POI_DATA=filtered, keyword=keyword, FIELDS=SearchConfig.FIELDS)
+    results = search_poi(POI_DATA=filtered, keyword=keyword, FIELDS=SearchConfig.FIELDS)
 
-    return result
+    elapsed_ms = (time.perf_counter() - t0) * 1000.0
+
+    return jsonify({
+        "count": len(results),
+        "elapsed_ms": round(elapsed_ms, 3),
+        "results": results
+    })
 
 
 @api.route('/test_db', methods=['GET'])
