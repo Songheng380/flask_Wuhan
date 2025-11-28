@@ -110,9 +110,9 @@ def bbox_query():
 
     # 关键字搜索
     keyword = request.args.get("q", "").strip().lower()
-    result = search_poi(POI_DATA=filtered, keyword=keyword, FIELDS=SearchConfig.FIELDS)
+    search_poi(POI_DATA=filtered, keyword=keyword, FIELDS=SearchConfig.FIELDS)
 
-    return result
+    return jsonify(filtered)
 
 # @api.route('/search')
 # def search_handler():

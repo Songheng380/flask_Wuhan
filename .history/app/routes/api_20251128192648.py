@@ -42,16 +42,17 @@ def search_poi(POI_DATA=None, keyword=None, FIELDS=SearchConfig.FIELDS):
     """
     if SearchConfig.DEBUG:
         POI_DATA = load_poi_data()
-        
-    exact = request.args.get("exact", "false").lower() == "true"
-
+        keyword = request.args.get("q", "").strip()
+        exact = request.args.get("exact", "false").lower() == "true"
+    else:
+        exact = False  # 默认模糊查询
 
     if not keyword:
         return jsonify([])
 
     if exact:
         # 精确查询
-        print("✅ 进行精确查询")
+        print("✅ 进行模糊查询")
         results = [
             item for item in POI_DATA
             if any(keyword == str(item.get(field, "")).lower() for field in FIELDS)
@@ -110,9 +111,15 @@ def bbox_query():
 
     # 关键字搜索
     keyword = request.args.get("q", "").strip().lower()
-    result = search_poi(POI_DATA=filtered, keyword=keyword, FIELDS=SearchConfig.FIELDS)
+    if keyword:
+        filtered = [
+            item for item in filtered
+            if keyword in item.get("name", "").lower()
+            or keyword in item.get("type", "").lower()
+            or keyword in item.get("district", "").lower()
+        ]
 
-    return result
+    return jsonify(filtered)
 
 # @api.route('/search')
 # def search_handler():
