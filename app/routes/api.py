@@ -1,13 +1,11 @@
-# app/routes/api.py
 from flask import Blueprint, request, jsonify, current_app
 from app import db
 from sqlalchemy.exc import OperationalError
 import json
+import os
+from pathlib import Path
 from geoalchemy2 import Geometry
 from sqlalchemy import func
-import json
-import os
-
 
 # 数据模型
 from app.models.metro_station import MetroStation
@@ -27,7 +25,143 @@ if SearchConfig.ifWordVec:
     WORD_VECTORS = load_chinese_vectors(os.path.join(BASE_DIR, "./src/sgns.target.word-word.dynwin5.thr10.neg5.dim300.iter5"), max_words=500000)
 else:
     WORD_VECTORS = None
-# # 属性关键词查询（如“学校”、“商业”）
+
+# ========================== 矢量与栅格数据处理 ==========================
+# 数据目录（指向项目根目录的 data 文件夹）
+DATA_DIR = Path(__file__).parent.parent.parent / "data"
+
+# 如果 shapefile 缺失 .shx，尝试让 GDAL 自动恢复（优先使用 osgeo.gdal）
+try:
+    from osgeo import gdal
+    gdal.SetConfigOption('SHAPE_RESTORE_SHX', 'YES')
+except Exception:
+    # 如果没有安装 GDAL Python 绑定，设置环境变量作为备用
+    os.environ.setdefault('SHAPE_RESTORE_SHX', 'YES')
+
+# 扫描并加载矢量（shp 或 geojson）与栅格（tif）文件，启动时只加载一次并缓存
+LAYERS = {}
+
+
+def load_vector(path: Path, name: str):
+    """加载矢量文件（shapefile 或 GeoJSON）"""
+    try:
+        import geopandas as gpd
+    except Exception:
+        print("geopandas not installed; can't load vector:", path)
+        return
+    
+    # 尝试第一次：禁用 SHAPE_RESTORE_SHX 以避免写入权限问题
+    os.environ['SHAPE_RESTORE_SHX'] = 'NO'
+    try:
+        gdf = gpd.read_file(path)
+        # 转为 WGS84（经纬度）以便前端直接使用
+        try:
+            gdf = gdf.to_crs(epsg=4326)
+        except Exception:
+            pass
+        geojson = json.loads(gdf.to_json())
+        LAYERS[name] = {"type": "vector", "geojson": geojson}
+        print(f"Loaded vector: {name}")
+        os.environ.pop('SHAPE_RESTORE_SHX', None)
+        return
+    except Exception as e:
+        print(f"Failed loading vector {path}: {e}")
+        os.environ.pop('SHAPE_RESTORE_SHX', None)
+
+
+def load_raster(path: Path, name: str):
+    """加载栅格文件（GeoTIFF 等）"""
+    try:
+        import rasterio
+        import numpy as np
+        from PIL import Image
+    except Exception:
+        print("rasterio/pillow not installed; can't load raster:", path)
+        return
+    try:
+        with rasterio.open(path) as src:
+            bounds = src.bounds  # left, bottom, right, top
+            arr = src.read()
+            # convert to H x W x C uint8
+            if arr.ndim == 3 and arr.shape[0] >= 3:
+                img = np.dstack([arr[0], arr[1], arr[2]])
+            else:
+                # 单波段，做灰度渲染
+                band = arr[0]
+                # 归一化到 0-255
+                mn, mx = band.min(), band.max()
+                if mx == mn:
+                    img = np.stack([band, band, band], axis=2)
+                else:
+                    norm = ((band - mn) / (mx - mn) * 255).astype('uint8')
+                    img = np.stack([norm, norm, norm], axis=2)
+            # 确保 uint8
+            if img.dtype != 'uint8':
+                img = (255 * (img.astype('float32') / img.max())).clip(0, 255).astype('uint8')
+
+            out_dir = Path(__file__).parent.parent.parent / 'static' / 'imagery'
+            out_dir.mkdir(parents=True, exist_ok=True)
+            out_png = out_dir / f"{name}.png"
+            Image.fromarray(img).save(out_png)
+
+            LAYERS[name] = {
+                "type": "raster",
+                "url": f"/static/imagery/{name}.png",
+                # Leaflet expects bounds as [[south, west],[north, east]]
+                "bounds": [[bounds.bottom, bounds.left], [bounds.top, bounds.right]]
+            }
+            print(f"Loaded raster: {name}")
+    except Exception as e:
+        print(f"Failed loading raster {path}: {e}")
+
+
+# 启动时扫描 data 目录下的 shp / geojson / tif 文件
+if DATA_DIR.exists():
+    for p in DATA_DIR.rglob('*'):
+        if p.suffix.lower() in ('.shp', '.geojson', '.json'):
+            name = p.stem
+            load_vector(p, name)
+        elif p.suffix.lower() in ('.tif', '.tiff'):
+            name = p.stem
+            load_raster(p, name)
+
+
+# ========================== 图层管理 API ==========================
+@api.route('/layers', methods=['GET'])
+def list_layers():
+    """返回所有可用图层的元信息"""
+    out = []
+    for name, info in LAYERS.items():
+        entry = {"name": name, "type": info.get('type')}
+        if info.get('type') == 'raster':
+            entry['bounds'] = info.get('bounds')
+            entry['url'] = info.get('url')
+        out.append(entry)
+    return jsonify(out)
+
+
+@api.route('/geojson/<layer_name>', methods=['GET'])
+def get_geojson(layer_name):
+    """获取指定矢量图层的 GeoJSON"""
+    info = LAYERS.get(layer_name)
+    if not info or info.get('type') != 'vector':
+        return jsonify({}), 404
+    return jsonify(info.get('geojson'))
+
+
+@api.route('/imagery/<layer_name>', methods=['GET'])
+def get_imagery(layer_name):
+    """获取指定栅格图层的 URL 和 bounds"""
+    info = LAYERS.get(layer_name)
+    if not info or info.get('type') != 'raster':
+        return jsonify({}), 404
+    return jsonify({
+        'url': info.get('url'),
+        'bounds': info.get('bounds')
+    })
+
+
+# ========================== POI 数据查询 ==========================
 
 def load_poi_data():
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -35,6 +169,7 @@ def load_poi_data():
     poi_path = os.path.normpath(poi_path)
     with open(poi_path, "r", encoding="utf-8") as f:
         return json.load(f)
+
     
 def search_poi(POI_DATA=None, keyword=None, FIELDS=SearchConfig.FIELDS):
     """
@@ -88,7 +223,49 @@ def search_poi(POI_DATA=None, keyword=None, FIELDS=SearchConfig.FIELDS):
     return jsonify(results)
 
 
-
+# ========================== 矢量图层中的查询接口 ==========================
+@api.route('/search-layer', methods=['GET'])
+def search_layer():
+    """
+    在指定矢量图层中查询
+    参数：
+    - layer: 图层名称
+    - q: 关键词
+    - exact: 是否精确查询（默认模糊）
+    """
+    layer_name = request.args.get('layer', '').strip()
+    keyword = request.args.get('q', '').strip().lower()
+    exact = request.args.get('exact', 'false').lower() == 'true'
+    
+    if not layer_name or not keyword:
+        return jsonify([]), 400
+    
+    # 获取图层数据
+    info = LAYERS.get(layer_name)
+    if not info or info.get('type') != 'vector':
+        return jsonify({"error": "Layer not found or not a vector layer"}), 404
+    
+    geojson = info.get('geojson', {})
+    features = geojson.get('features', [])
+    
+    # 执行查询
+    results = []
+    for feature in features:
+        if not feature.get('properties'):
+            continue
+        props = feature.properties
+        
+        # 在所有属性中查找匹配
+        matched = False
+        if exact:
+            matched = any(keyword == str(props.get(k, '')).lower() for k in props)
+        else:
+            matched = any(keyword in str(props.get(k, '')).lower() for k in props)
+        
+        if matched:
+            results.append(feature)
+    
+    return jsonify(results)
     
 # 接收矩形框参数
 def get_bbox_params():
@@ -134,18 +311,6 @@ def bbox_query():
     result = search_poi(POI_DATA=filtered, keyword=keyword, FIELDS=SearchConfig.FIELDS)
 
     return result
-
-# @api.route('/search')
-# def search_handler():
-#     if SearchConfig.DEBUG_POI_SERACH:
-#         return search_poi()
-#     else:
-#         return bbox_query()
-
-# if SearchConfig.DEBUG_POI_SEARCH:
-#     api.add_url_rule('/search', view_func=search_poi)
-# else:
-#     api.add_url_rule('/search', view_func=bbox_query)
 
 
 @api.route('/test_db', methods=['GET'])

@@ -1,253 +1,359 @@
 // 全局变量
 let map = null;
-let infoWindow = null;
-let currentMarkers = []; 
-let rectangleTool = null;
-let currentRectangle = null; // 保存矩形对象
+let currentLayerGroup = L.layerGroup();
+let currentImageOverlay = null;
+let currentLayerName = null;
+let currentLayerData = null;  // 当前图层的 GeoJSON
+let resultMarkers = [];
 
-// 初始化地图
+// 初始化 Leaflet 地图
 function initMap() {
-    try {
-        // 确保 AMap 已加载
-        if (typeof AMap === 'undefined') {
-            console.error("高德地图 JS API 未加载，请检查 Key 是否有效或网络是否通畅。");
+    map = L.map('map');
+
+    // 添加 OpenStreetMap 底图
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19
+    }).addTo(map);
+
+    // 初始视图：武汉近似范围
+    const wuhanBounds = [[29.9, 113.8], [31.0, 114.7]];
+    map.fitBounds(wuhanBounds, {padding: [20, 20]});
+
+    // 添加图层组
+    currentLayerGroup.addTo(map);
+
+    // 加载图层列表
+    loadLayerList();
+    
+    // 绑定回车键搜索
+    document.getElementById('keyword').addEventListener('keypress', function(e){
+        if(e.key === 'Enter') searchByKeyword();
+    });
+}
+
+// 加载图层列表到下拉菜单
+function loadLayerList(){
+    fetch('/api/layers')
+        .then(r => r.json())
+        .then(data => {
+            const sel = document.getElementById('layerSelect');
+            data.forEach(item => {
+                const opt = document.createElement('option');
+                opt.value = item.name;
+                opt.text = `${item.name} [${item.type}]`;
+                sel.appendChild(opt);
+            });
+        })
+        .catch(err => console.error('Failed to load layers:', err));
+}
+
+// 图层选择改变
+document.addEventListener('DOMContentLoaded', function(){
+    initMap();
+    
+    document.getElementById('layerSelect').addEventListener('change', function(){
+        const name = this.value;
+        currentLayerName = name;
+        currentLayerData = null;
+        
+        if(name === '__none__'){
+            clearMapLayers();
             return;
         }
-
-        map = new AMap.Map('container', {
-            zoom: 11,
-            center: [114.3, 30.58], // 武汉中心
-            viewMode: '2D'
-        });
-
-        infoWindow = new AMap.InfoWindow({ offset: new AMap.Pixel(0, -10) });
-
-        // 绑定回车键搜索功能
-        document.getElementById('keyword').addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') {
-                searchByKeyword();
-            }
-        });
-
-        // 页面加载完成后，自动加载一次全部数据
-        //fetchData('');
-
-    } catch (error) {
-        console.error("地图初始化失败:", error);
-    }
-}
-
-// 页面加载完毕后执行初始化
-document.addEventListener('DOMContentLoaded', initMap);
-
-
-// 搜索
-function searchByKeyword() {
-    const keywordInput = document.getElementById('keyword');
-    const q = keywordInput.value.trim();
-    if (!q) return alert("请输入关键词");
-
-    // 获取查询模式
-    const mode = document.querySelector('input[name="searchMode"]:checked').value;
-    console.log(`正在搜索: "${q}" 模式: ${mode}`);
-
-    // 禁用输入框防止重复提交
-    keywordInput.disabled = true;
-
-    // 调用通用 fetchData，附加模式参数
-    fetchData(q, mode)
-        .finally(() => {
-            keywordInput.disabled = false;
-            keywordInput.focus();
-        });
-}
-
-// 修改 fetchData 接收 mode 参数
-function fetchData(query, mode = "fuzzy") {
-    let url = `/api/search?q=${encodeURIComponent(query)}`;
-
-    if (mode === "exact") {
-        url += "&exact=true";
-    } else if (mode === "semantic") {
-        url += "&mode=semantic";
-    }
-
-    if (currentRectangle) {
-        const bounds = currentRectangle.getBounds();
-        url += `&min_lon=${bounds.getSouthWest().lng}&min_lat=${bounds.getSouthWest().lat}&max_lon=${bounds.getNorthEast().lng}&max_lat=${bounds.getNorthEast().lat}`;
-    }
-
-    return fetch(url)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`网络请求失败，状态码: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            console.log("后端返回的数据数量:", data.length);
-            
-            clearMarkersOnly();
-            addMarkers(data);
-            showResults(data, query ? `"${query}" 的搜索结果` : '全部数据');
-        })
-        .catch(error => {
-            console.error("❌ 错误:", error);
-            alert("发生错误: " + error.message);
-        });
-}
-
-// 只清除标记，不清除矩形或工具
-function clearMarkersOnly() {
-    currentMarkers.forEach(marker => marker.setMap(null));
-    currentMarkers = [];
-}
-
-// 添加标记
-function addMarkers(pois) {
-    if (!map) return;
-
-    const newMarkers = [];
-    const validBounds = new AMap.Bounds();
-    let hasValidData = false;
-
-    pois.forEach((poi, index) => {
-        const lon = parseFloat(poi.lon || poi.lng || poi.x || poi.longitude);
-        const lat = parseFloat(poi.lat || poi.y || poi.latitude);
-
-        if (isNaN(lon) || isNaN(lat)) {
-            console.warn(`第 ${index} 条数据坐标无效，跳过:`, poi);
-            return;  // 彻底过滤
-        }
-
-        const marker = new AMap.Marker({
-            position: [lon, lat],
-            title: poi.name,
-            map: map
-        });
-
-        const content = `
-            <div style="padding:5px;">
-                <strong>${poi.name || "无名称"}</strong><br>
-                <span style="color:#666;font-size:12px;">${poi.type || "未知类型"} | ${poi.district || ""}</span>
-            </div>`;
-
-        marker.on('click', () => {
-            const pos = marker.getPosition();
-            if (!pos || isNaN(pos.lng) || isNaN(pos.lat)) return; // ✅ 关键检查
-            infoWindow.setContent(content);
-            infoWindow.open(map, pos);
-        });
-
-        newMarkers.push(marker);
+        
+        clearMapLayers();
+        clearResults();
+        
+        // 尝试作为矢量
+        fetch(`/api/geojson/${name}`)
+            .then(r => {
+                if(r.status === 200) return r.json();
+                throw new Error('not vector');
+            })
+            .then(geojson => {
+                currentLayerData = geojson;
+                const gj = L.geoJSON(geojson, {
+                    style: function(feature){
+                        return {color: '#3388ff', weight: 2, fillOpacity: 0.2};
+                    },
+                    pointToLayer: function(feature, latlng){
+                        return L.circleMarker(latlng, {
+                            radius: 6,
+                            fillColor: '#ff5722',
+                            color: '#fff',
+                            weight: 1,
+                            fillOpacity: 0.9
+                        });
+                    },
+                    onEachFeature: function(feature, layer){
+                        let popupContent = '<div style="max-width: 200px;">';
+                        if(feature.properties){
+                            const props = feature.properties;
+                            let name = props.name || props.Name || props.NAME || props['名称'] || '(无名称)';
+                            popupContent += `<b>${name}</b><br>`;
+                            for(let key in props){
+                                if(key.toLowerCase() !== 'name' && props[key]){
+                                    const val = String(props[key]);
+                                    if(val.length < 100){
+                                        popupContent += `<small><b>${key}:</b> ${val}</small><br>`;
+                                    }
+                                }
+                            }
+                        }
+                        popupContent += '</div>';
+                        layer.bindPopup(popupContent);
+                        layer.on('click', function(){
+                            this.openPopup();
+                        });
+                    }
+                }).addTo(currentLayerGroup);
+                
+                try {
+                    map.fitBounds(gj.getBounds(), {padding: [20, 20]});
+                } catch(e){}
+            })
+            .catch(() => {
+                // 尝试作为栅格
+                fetch(`/api/imagery/${name}`)
+                    .then(r => r.json())
+                    .then(info => {
+                        if(info && info.url && info.bounds){
+                            const bounds = [[info.bounds[0][0], info.bounds[0][1]], 
+                                          [info.bounds[1][0], info.bounds[1][1]]];
+                            currentImageOverlay = L.imageOverlay(info.url, bounds).addTo(map);
+                            map.fitBounds(bounds, {padding: [20, 20]});
+                        }
+                    })
+                    .catch(err => console.error('Failed to load imagery:', err));
+            });
     });
+});
 
-    currentMarkers = newMarkers;
-
-    if (hasValidData) {
-        map.setBounds(validBounds);
+// 清除地图图层
+function clearMapLayers(){
+    currentLayerGroup.clearLayers();
+    if(currentImageOverlay){
+        map.removeLayer(currentImageOverlay);
+        currentImageOverlay = null;
     }
 }
 
-function startRangeQuery() {
-    if (!map) return;
-
-    // 关闭已有工具
-    if (rectangleTool) {
-        rectangleTool.close();
-        rectangleTool = null;
+// 按关键词搜索
+function searchByKeyword(){
+    const kw = document.getElementById('keyword').value.trim();
+    if(!kw) {
+        alert('请输入关键词');
+        return;
     }
-
-    // 删除已有矩形，只保留一个
-    if (currentRectangle) {
-        currentRectangle.setMap(null);  // 从地图上移除
-        currentRectangle = null;
-    }
-
-    rectangleTool = new AMap.MouseTool(map);
-
-    rectangleTool.rectangle({
-        strokeColor: "#0099FF",
-        strokeWeight: 2,
-        fillColor: "#02c3f4",
-        fillOpacity: 0.15
-    });
-
-    rectangleTool.on('draw', function (event) {
-        currentRectangle = event.obj;  // 保留新的矩形对象
-        document.getElementById('rangeHint').style.display = 'none';
-
-        const bounds = currentRectangle.getBounds();
-        const southwest = bounds.getSouthWest();
-        const northeast = bounds.getNorthEast();
-
-        const coords = {
-            min_lon: southwest.lng,
-            min_lat: southwest.lat,
-            max_lon: northeast.lng,
-            max_lat: northeast.lat
-        };
-
-        console.log("矩形坐标:", coords);
-
-        // 可以选择关闭工具，让用户只能绘制一次
-        rectangleTool.close();
-        rectangleTool = null;
-    });
-}
-
-
-
-
-window.startRangeQuery = startRangeQuery;
-
-function clearMarkers() {
-    // 清除标记
-    currentMarkers.forEach(marker => marker.setMap(null));
-    currentMarkers = [];
-
-    // 清除矩形
-    if (currentRectangle) {
-        currentRectangle.setMap(null);
-        currentRectangle = null;
-    }
-    // 关闭绘制工具
-    if (rectangleTool) {
-        rectangleTool.close();
-        rectangleTool = null;
-    }
-
-    document.getElementById('rangeHint').style.display = 'none';
-}
-
-
-
-// 列表展示
-function showResults(items, title) {
-    const resultsDiv = document.getElementById('results');
-    let html = `<h5>${title} <span class="badge bg-secondary">${items.length}</span></h5>`;
     
-    if (items.length === 0) {
-        html += '<div class="alert alert-warning">未找到相关数据</div>';
-    } else {
-        html += '<div class="list-group list-group-flush" style="max-height: 400px; overflow-y: auto;">';
-        items.forEach(item => {
-            html += `
-                <div class="list-group-item list-group-item-action result-item">
-                    <div class="d-flex w-100 justify-content-between">
-                        <h6 class="mb-1">${item.name}</h6>
-                        <small class="text-muted">${item.district}</small>
-                    </div>
-                    <small class="text-muted">${item.type}</small>
-                </div>`;
+    // 如果选中了矢量图层，从该图层中查询
+    if(currentLayerData && currentLayerData.features){
+        const mode = document.querySelector('input[name="queryMode"]:checked').value;
+        const results = currentLayerData.features.filter(feature => {
+            if(!feature.properties) return false;
+            const props = feature.properties;
+            
+            if(mode === 'exact'){
+                return Object.values(props).some(v => String(v).toLowerCase() === kw.toLowerCase());
+            } else {
+                return Object.values(props).some(v => String(v).toLowerCase().includes(kw.toLowerCase()));
+            }
         });
-        html += '</div>';
+        
+        displayLayerSearchResults(results, kw);
+    } else if(currentLayerName && currentLayerName !== '__none__'){
+        alert('当前图层不支持查询或未完全加载，请选择矢量图层');
     }
-    resultsDiv.innerHTML = html;
 }
 
+// 显示图层查询结果
+function displayLayerSearchResults(features, keyword){
+    clearResults();
+    clearMapLayers();
+    
+    if(features.length === 0){
+        document.getElementById('results').innerHTML = '<div style="color: red;">未找到匹配的要素</div>';
+        return;
+    }
+    
+    // 重新绘制，高亮搜索结果
+    const gj = L.geoJSON(currentLayerData, {
+        style: function(feature){
+            const isResult = features.includes(feature);
+            if(isResult){
+                return {color: '#ff0000', weight: 3, fillOpacity: 0.5};
+            } else {
+                return {color: '#3388ff', weight: 1, fillOpacity: 0.1};
+            }
+        },
+        pointToLayer: function(feature, latlng){
+            const isResult = features.includes(feature);
+            if(isResult){
+                return L.circleMarker(latlng, {radius: 8, fillColor: '#ff0000', color: '#fff', weight: 2, fillOpacity: 1.0});
+            } else {
+                return L.circleMarker(latlng, {radius: 5, fillColor: '#999', color: '#fff', weight: 1, fillOpacity: 0.5});
+            }
+        },
+        onEachFeature: function(feature, layer){
+            let popupContent = '<div style="max-width: 200px;">';
+            if(feature.properties){
+                const props = feature.properties;
+                let name = props.name || props.Name || props.NAME || props['名称'] || '(无名称)';
+                popupContent += `<b>${name}</b><br>`;
+                for(let key in props){
+                    if(key.toLowerCase() !== 'name' && props[key]){
+                        const val = String(props[key]);
+                        if(val.length < 100){
+                            popupContent += `<small><b>${key}:</b> ${val}</small><br>`;
+                        }
+                    }
+                }
+            }
+            popupContent += '</div>';
+            layer.bindPopup(popupContent);
+            layer.on('click', function(){
+                this.openPopup();
+            });
+        }
+    }).addTo(currentLayerGroup);
+    
+    // 缩放到结果
+    try {
+        const bounds = gj.getBounds();
+        if(bounds.isValid()){
+            map.fitBounds(bounds, {padding: [20, 20]});
+        }
+    } catch(e){}
+    
+    // 显示结果列表
+    const html = features.map(f => {
+        let name = '(无名称)';
+        if(f.properties){
+            name = f.properties.name || f.properties.Name || f.properties.NAME || f.properties['名称'] || '(无名称)';
+        }
+        return `<div class="result-item" style="background: #ffe6e6; padding: 4px; border-radius: 3px;">
+                    <b>${name}</b>
+                </div>`;
+    }).join('');
+    document.getElementById('results').innerHTML = `<div style="font-weight: bold; margin-bottom: 8px;">找到 ${features.length} 个结果:</div>${html}`;
+}
 
-// 暴露函数给全局（防止 HTML onclick 找不到）
+// 清除结果
+function clearResults(){
+    document.getElementById('results').innerHTML = '<div class="text-muted">未执行查询</div>';
+}
+
+// 框选查询
+let boxStart = null;
+let boxRect = null;
+function startBoxSelect(){
+    if(!currentLayerName || currentLayerName === '__none__'){
+        alert('请先选择一个图层');
+        return;
+    }
+    
+    document.getElementById('boxHint').style.display = 'block';
+    map.dragging.disable();  // 禁用地图拖拽
+    map.getContainer().style.cursor = 'crosshair';
+    
+    function onMouseDown(e){
+        boxStart = e.latlng;
+        if(boxRect) map.removeLayer(boxRect);
+        boxRect = null;
+        map.on('mousemove', onMouseMove);
+    }
+    
+    function onMouseMove(e){
+        if(!boxStart) return;
+        
+        if(boxRect) {
+            map.removeLayer(boxRect);
+        }
+        
+        boxRect = L.rectangle([boxStart, e.latlng], {
+            color: '#ffaa00',
+            weight: 2,
+            fillColor: '#ffbb33',
+            fillOpacity: 0.2
+        }).addTo(map);
+    }
+    
+    function onMouseUp(e){
+        map.off('mousemove', onMouseMove);
+        map.off('mousedown', onMouseDown);
+        map.off('mouseup', onMouseUp);
+        map.dragging.enable();  // 恢复地图拖拽
+        map.getContainer().style.cursor = '';
+        document.getElementById('boxHint').style.display = 'none';
+        
+        if(!boxStart || !boxRect) return;
+        
+        const b = boxRect.getBounds();
+        const min_lon = b.getWest();
+        const min_lat = b.getSouth();
+        const max_lon = b.getEast();
+        const max_lat = b.getNorth();
+        
+        // 移除矩形
+        if(boxRect) {
+            map.removeLayer(boxRect);
+            boxRect = null;
+        }
+        
+        // 在当前图层中执行范围查询
+        if(currentLayerData && currentLayerData.features){
+            const results = currentLayerData.features.filter(feature => {
+                if(!feature.geometry) return false;
+                
+                const geomType = feature.geometry.type;
+                const coords = feature.geometry.coordinates;
+                
+                if(geomType === 'Point'){
+                    // Point: [lon, lat]
+                    const lon = coords[0];
+                    const lat = coords[1];
+                    return lon >= min_lon && lon <= max_lon && lat >= min_lat && lat <= max_lat;
+                } else if(geomType === 'LineString' || geomType === 'Polygon'){
+                    // 检查是否与矩形相交
+                    return checkGeometryInBounds(coords, geomType, min_lon, min_lat, max_lon, max_lat);
+                } else if(geomType === 'MultiPoint' || geomType === 'MultiLineString' || geomType === 'MultiPolygon'){
+                    // 检查任意一部分是否在范围内
+                    return coords.some(c => checkGeometryInBounds(c, geomType.replace('Multi', ''), min_lon, min_lat, max_lon, max_lat));
+                }
+                return false;
+            });
+            displayLayerSearchResults(results, '矩形范围内');
+        }
+        
+        boxStart = null;
+    }
+    
+    map.on('mousedown', onMouseDown);
+    map.on('mouseup', onMouseUp);
+}
+
+// 全局函数暴露
 window.searchByKeyword = searchByKeyword;
-window.clearMarkers = clearMarkers;
-window.startRangeQuery = startRangeQuery;
+window.startBoxSelect = startBoxSelect;
+window.clearResults = clearResults;
+
+// 辅助函数：检查几何图形是否与矩形范围相交
+function checkGeometryInBounds(coords, geomType, min_lon, min_lat, max_lon, max_lat){
+    if(geomType === 'LineString'){
+        // LineString: [[lon, lat], [lon, lat], ...]
+        return coords.some(point => {
+            const lon = point[0];
+            const lat = point[1];
+            return lon >= min_lon && lon <= max_lon && lat >= min_lat && lat <= max_lat;
+        });
+    } else if(geomType === 'Polygon'){
+        // Polygon: [[[lon, lat], [lon, lat], ...]]
+        return coords[0].some(point => {
+            const lon = point[0];
+            const lat = point[1];
+            return lon >= min_lon && lon <= max_lon && lat >= min_lat && lat <= max_lat;
+        });
+    }
+    return false;
+}
