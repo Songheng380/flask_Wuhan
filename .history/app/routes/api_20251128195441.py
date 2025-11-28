@@ -20,13 +20,10 @@ api = Blueprint('api', __name__)
 # api配置
 from app.config import SearchConfig
 
-# 初始化wordvec配置
+# wordvec配置
 from app.routes.wordvec import load_chinese_vectors, cosine_similarity, vectorize_text
-if SearchConfig.ifWordVec:
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    WORD_VECTORS = load_chinese_vectors(os.path.join(BASE_DIR, "./src/sgns.target.word-word.dynwin5.thr10.neg5.dim300.iter5"), max_words=500000)
-else:
-    WORD_VECTORS = None
+WORD_VECTORS = load_chinese_vectors("sgns.wiki.word", max_words=500000)
+
 # # 属性关键词查询（如“学校”、“商业”）
 
 def load_poi_data():
@@ -35,55 +32,41 @@ def load_poi_data():
     poi_path = os.path.normpath(poi_path)
     with open(poi_path, "r", encoding="utf-8") as f:
         return json.load(f)
-    
+
+
 def search_poi(POI_DATA=None, keyword=None, FIELDS=SearchConfig.FIELDS):
     """
-    支持三种查询模式：
-    1. 精确查询 exact=true
-    2. 模糊查询 exact=false
-    3. 语义查询 mode=semantic
+    POI查询接口，支持按名称和类型关键词搜索
+    参数：
+        POI_DATA: 数据列表（可选）
+        keyword: 查询关键词（可选）
+        FIELDS: 搜索字段列表
+    输出：
+        符合关键词的POI列表，JSON格式
     """
-    if SearchConfig.DEBUG_POI_SEARCH:
+    if SearchConfig.DEBUG:
         POI_DATA = load_poi_data()
+        
+    exact = request.args.get("exact", "false").lower() == "true"
 
-    keyword = request.args.get("q", "").strip().lower()
+
     if not keyword:
         return jsonify([])
 
-    exact = request.args.get("exact", "false").lower() == "true"
-    mode = request.args.get("mode", "text").lower()  # text / semantic
-
-    if mode == "semantic":
-        print("✅ 进行语义查询")
-        query_vector = vectorize_text(keyword, word_vectors=WORD_VECTORS)
-        if query_vector is None:
-            return jsonify([])
-
-        results = []
-        for item in POI_DATA:
-            # 简单将POI名字拼成字符列表进行平均向量
-            item_text = "".join([str(item.get(field, "")) for field in FIELDS])
-            item_vector = vectorize_text(item_text, word_vectors=WORD_VECTORS)
-            if item_vector is None:
-                continue
-            sim = cosine_similarity(query_vector, item_vector)
-            results.append((sim, item))
-        # 按相似度排序
-        results.sort(key=lambda x: x[0], reverse=True)
-        results = [x[1] for x in results[:SearchConfig.searchListNum]]  # 可选：返回前10条
+    if exact:
+        # 精确查询
+        print("✅ 进行精确查询")
+        results = [
+            item for item in POI_DATA
+            if any(keyword == str(item.get(field, "")).lower() for field in FIELDS)
+        ]
     else:
-        if exact:
-            print("✅ 进行精确查询")
-            results = [
-                item for item in POI_DATA
-                if any(keyword == str(item.get(field, "")).lower() for field in FIELDS)
-            ]
-        else:
-            print("✅ 进行模糊查询")
-            results = [
-                item for item in POI_DATA
-                if any(keyword in str(item.get(field, "")).lower() for field in FIELDS)
-            ]
+        # 模糊查询
+        print("✅ 进行模糊查询")
+        results = [
+            item for item in POI_DATA
+            if any(keyword in str(item.get(field, "")).lower() for field in FIELDS)
+        ]
 
     return jsonify(results)
 

@@ -43,7 +43,7 @@ def search_poi(POI_DATA=None, keyword=None, FIELDS=SearchConfig.FIELDS):
     2. 模糊查询 exact=false
     3. 语义查询 mode=semantic
     """
-    if SearchConfig.DEBUG_POI_SEARCH:
+    if SearchConfig.DEBUG:
         POI_DATA = load_poi_data()
 
     keyword = request.args.get("q", "").strip().lower()

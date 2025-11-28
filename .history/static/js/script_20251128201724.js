@@ -54,29 +54,45 @@ function searchByKeyword() {
     // 禁用输入框防止重复提交
     keywordInput.disabled = true;
 
-    // 调用通用 fetchData，附加模式参数
-    fetchData(q, mode)
+    // 根据模式调用不同后端接口
+    let url;
+    if (mode === 'exact') {
+        // 精确查询：后端增加 exact=true 参数
+        url = `/api/search?q=${encodeURIComponent(q)}&exact=true`;
+    } else {
+        // 模糊查询：默认
+        url = `/api/search?q=${encodeURIComponent(q)}`;
+    }
+
+    fetch(url)
+        .then(res => {
+            if (!res.ok) throw new Error(`网络请求失败，状态码: ${res.status}`);
+            return res.json();
+        })
+        .then(data => {
+            console.log("返回结果数量:", data.length);
+            clearMarkersOnly();
+            addMarkers(data);
+            showResults(data, q ? `"${q}" 的搜索结果` : '全部数据');
+        })
+        .catch(error => {
+            console.error("❌ 错误:", error);
+            alert("发生错误: " + error.message);
+        })
         .finally(() => {
             keywordInput.disabled = false;
             keywordInput.focus();
         });
 }
 
-// 修改 fetchData 接收 mode 参数
-function fetchData(query, mode = "fuzzy") {
-    let url = `/api/search?q=${encodeURIComponent(query)}`;
 
-    if (mode === "exact") {
-        url += "&exact=true";
-    } else if (mode === "semantic") {
-        url += "&mode=semantic";
-    }
-
+// 通用数据请求函数
+function fetchData(query) {
+    url = `/api/search?q=${encodeURIComponent(query)}`;
     if (currentRectangle) {
         const bounds = currentRectangle.getBounds();
         url += `&min_lon=${bounds.getSouthWest().lng}&min_lat=${bounds.getSouthWest().lat}&max_lon=${bounds.getNorthEast().lng}&max_lat=${bounds.getNorthEast().lat}`;
     }
-
     return fetch(url)
         .then(response => {
             if (!response.ok) {
@@ -87,7 +103,9 @@ function fetchData(query, mode = "fuzzy") {
         .then(data => {
             console.log("后端返回的数据数量:", data.length);
             
+            // 注意这里只清除标记，不清除矩形
             clearMarkersOnly();
+
             addMarkers(data);
             showResults(data, query ? `"${query}" 的搜索结果` : '全部数据');
         })
