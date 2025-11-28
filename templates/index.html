@@ -2,71 +2,136 @@
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
-    <title>武汉市数据管理系统 - 高德地图版</title>
-    <!-- 引入 Bootstrap -->
+    <title>武汉市数据管理系统</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- 引入自定义 CSS (使用 url_for) -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        /* 全局设置 */
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* 防止滚动条 */
+        }
+
+        .app-layout {
+            display: flex;
+            gap: 20px;
+            padding: 20px;
+            height: calc(100vh - 40px); /* 减去 body padding */
+            box-sizing: border-box;
+        }
+
+        .sidebar {
+            width: 360px;
+            flex: 0 0 360px;
+            overflow: auto;
+            background: #fff;
+            border-radius: 6px;
+            padding: 15px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+        }
+
+        .map-area {
+            flex: 1 1 auto;
+            min-width: 0; /* 防止 flex 子项溢出 */
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+
+        .query-panel {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 12px;
+        }
+
+        .result-item {
+            border-bottom: 1px solid #eee;
+            padding: 8px 4px;
+            font-size: 0.9em;
+        }
+        
+        .result-item:hover {
+            background: #f0f0f0;
+            cursor: pointer;
+        }
+
+        h4 {
+            color: #333;
+            font-weight: 600;
+        }
+
+        h5 {
+            color: #555;
+            font-size: 1.1em;
+            margin-top: 0;
+        }
+    </style>
 </head>
 <body>
-<div class="container mt-4">
-    <h2 class="text-center mb-4">武汉市主城区数据管理系统</h2>
+    <div class="app-layout">
+        <div class="sidebar">
+            <h4 class="mb-3">武汉市主城区数据系统</h4>
 
-    <div class="row">
-        <!-- 查询面板 -->
-        <div class="col-md-4">
+            <!-- 图层选择 -->
+            <div class="query-panel">
+                <h5>图层管理</h5>
+                <select id="layerSelect" class="form-select mb-2">
+                    <option value="__none__">-- 请选择图层（矢量 / 栅格） --</option>
+                </select>
+                <small class="text-muted">底图: OpenStreetMap</small>
+            </div>
+
+            <!-- 属性查询 -->
             <div class="query-panel">
                 <h5>属性查询</h5>
-                <input type="text" id="keyword" class="form-control mb-2" placeholder="输入关键词，如'学校'">
-
-                <!-- 查询模式 -->
-                <div class="mb-2">
-                    <label class="form-check-label me-2" for="modeFuzzy">
-                        <input type="radio" id="modeFuzzy" name="searchMode" value="fuzzy" checked> 模糊查询
-                    </label>
-                    <label class="form-check-label me-2" for="modeExact">
-                        <input type="radio" id="modeExact" name="searchMode" value="exact"> 精确查询
-                    </label>
-                    <label class="form-check-label me-2" for="modeSemantic">
-                        <input type="radio" id="modeSemantic" name="searchMode" value="semantic"> 语义查询
-                    </label>
+                <div class="input-group mb-2">
+                    <input type="text" id="keyword" class="form-control" placeholder="输入关键词">
+                    <button class="btn btn-primary btn-sm" onclick="searchByKeyword()">搜</button>
                 </div>
-
-                <button class="btn btn-primary btn-sm" onclick="searchByKeyword()">搜索</button>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="queryMode" id="modeFuzzy" value="fuzzy" checked>
+                    <label class="form-check-label" for="modeFuzzy">模糊</label>
+                </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="queryMode" id="modeExact" value="exact">
+                    <label class="form-check-label" for="modeExact">精确</label>
+                </div>
             </div>
 
-            <div class="query-panel mt-3">
+            <!-- 范围查询 -->
+            <div class="query-panel">
                 <h5>范围查询</h5>
-                <button class="btn btn-warning btn-sm mb-2" onclick="startRangeQuery()">
-                    🖱️ 开始框选
-                </button>
-                <div id="rangeHint" class="status-hint" style="display:none;">
-                    请在地图上按住鼠标拖拽绘制区域...
+                <button class="btn btn-warning btn-sm me-2" onclick="startBoxSelect()">框选</button>
+                <button class="btn btn-danger btn-sm" onclick="clearResults()">清除</button>
+                <div id="boxHint" style="display:none; margin-top: 8px; color: #ff6600; font-size: 0.9em;">
+                    请在地图上拖拽绘制区域...
                 </div>
-                <button class="btn btn-success btn-sm" onclick="clearMarkers()">清除结果</button>
+            </div>
+
+            <!-- 查询结果 -->
+            <div class="mt-3">
+                <h5>查询结果</h5>
+                <div id="results" style="max-height: 400px; overflow-y: auto; font-size: 0.9em;">
+                    <div class="text-muted">未执行查询</div>
+                </div>
             </div>
         </div>
-        
-        <!-- 地图容器 -->
-        <div class="col-md-8">
-            <div id="container"></div>
+
+        <!-- 地图区域 -->
+        <div class="map-area">
+            <div id="map"></div>
         </div>
     </div>
 
-    <!-- 查询结果列表 -->
-    <div class="mt-4" id="results"></div>
-</div>
-
-<!-- 1. 先引入高德地图 JS API (保持不变) -->
-<script src="https://webapi.amap.com/maps?v=2.0&key=7c0ba95a8d12a0dc0acf27f7772702ac"></script>
-
-<!-- 3. 引入鼠标工具-->
-
-<script src="https://webapi.amap.com/maps?v=2.0&key=7c0ba95a8d12a0dc0acf27f7772702ac&plugin=AMap.MouseTool"></script>
-
-
-<!-- 3. 再引入自定义 JS (使用 url_for) -->
-<script src="{{ url_for('static', filename='js/script.js') }}"></script>
-
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
 </html>
