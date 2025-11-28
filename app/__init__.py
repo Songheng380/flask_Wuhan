@@ -18,7 +18,9 @@ def create_app(config_class=Config):
     # 注册蓝图
     from app.routes.main import main as main_bp
     from app.routes.api import api as api_bp
+    from app.routes.admin import admin as admin_bp
     app.register_blueprint(main_bp)
     app.register_blueprint(api_bp, url_prefix='/api')
+    app.register_blueprint(admin_bp, url_prefix='/admin')
 
     return app

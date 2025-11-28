@@ -5,7 +5,7 @@ from geoalchemy2 import Geometry  # 处理PostGIS空间类型
 class MetroStation(db.Model):
     # 指定表所属的schema和表名
     __tablename__ = '武汉市地铁站点'
-    __table_args__ = {'schema': 'wuhan_shp'}  # 绑定到wuhan_shp schema
+    __table_args__ = {'schema': 'wuhan_sum'}  # 绑定到wuhan_sum schema
 
     # 匹配数据库表字段
     ogc_fid = db.Column(db.Integer, primary_key=True, autoincrement=True)  # 自增主键

@@ -3,14 +3,14 @@ document.addEventListener('DOMContentLoaded', function() {
     const POI_CONFIG = {
         publicservices: {
             label: "公共服务",
-            apiPrefix: "/api/publicservices",
+            apiPrefix: "/admin/publicservices",
             primaryKey: "fid",
             fields: [
                 { name: "name", label: "名称", required: true, type: "text" },
                 { name: "type", label: "类型", required: true, type: "text" },
                 { name: "address", label: "地址", required: false, type: "text" },
-                { name: "longitude", label: "经度", required: true, type: "number", step: "0.000001" },
-                { name: "latitude", label: "纬度", required: true, type: "number", step: "0.000001" },
+                { name: "longitude_wgs84", label: "经度", required: true, type: "number", step: "0.000001" },
+                { name: "latitude_wgs84", label: "纬度", required: true, type: "number", step: "0.000001" },
                 { name: "category", label: "分类", required: false, type: "text" }
             ],
             tableColumns: [
@@ -18,15 +18,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 { key: "name", label: "名称" },
                 { key: "type", label: "类型" },
                 { key: "address", label: "地址" },
-                { key: "longitude", label: "经度", format: (val) => val.toFixed(6) },
-                { key: "latitude", label: "纬度", format: (val) => val.toFixed(6) },
+                { key: "longitude_wgs84", label: "经度", format: (val) => val.toFixed(6) },
+                { key: "latitude_wgs84", label: "纬度", format: (val) => val.toFixed(6) },
                 { key: "category", label: "分类" },
                 { key: "operate", label: "操作" }
             ]
         },
         wuhanmetro: {
             label: "武汉市地铁站点",
-            apiPrefix: "/api/wuhanmetro",
+            apiPrefix: "/admin/wuhanmetro",
             primaryKey: "ogc_fid",
             fields: [
                 { name: "name", label: "站点名称", required: true, type: "text" },
@@ -49,46 +49,46 @@ document.addEventListener('DOMContentLoaded', function() {
         },
         wuhanmiddleschool: {
             label: "武汉市中学",
-            apiPrefix: "/api/wuhanmiddleschool",
+            apiPrefix: "/admin/wuhanmiddleschool",
             primaryKey: "ogc_fid",
             fields: [
                 { name: "name", label: "学校名称", required: true, type: "text" },
                 { name: "related_address", label: "相关地址", required: false, type: "text" },
-                { name: "x_transfer", label: "X坐标", required: true, type: "number", step: "0.000001" },
-                { name: "y_transfer", label: "Y坐标", required: true, type: "number", step: "0.000001" }
+                { name: "x_transfer", label: "经度", required: true, type: "number", step: "0.000001" },
+                { name: "y_transfer", label: "纬度", required: true, type: "number", step: "0.000001" }
             ],
             tableColumns: [
                 { key: "ogc_fid", label: "ID" },
                 { key: "name", label: "学校名称" },
                 { key: "related_address", label: "相关地址" },
-                { key: "x_transfer", label: "X坐标", format: (val) => val.toFixed(6) },
-                { key: "y_transfer", label: "Y坐标", format: (val) => val.toFixed(6) },
+                { key: "x_transfer", label: "经度", format: (val) => val.toFixed(6) },
+                { key: "y_transfer", label: "纬度", format: (val) => val.toFixed(6) },
                 { key: "operate", label: "操作" }
             ]
         },
         wuhanprimaryschool: {
             label: "武汉市小学",
-            apiPrefix: "/api/wuhanprimaryschool",
+            apiPrefix: "/admin/wuhanprimaryschool",
             primaryKey: "ogc_fid",
             fields: [
                 { name: "name", label: "学校名称", required: true, type: "text" },
                 { name: "related_address", label: "相关地址", required: false, type: "text" },
-                { name: "x_transfer", label: "X坐标", required: true, type: "number", step: "0.000001" },
-                { name: "y_transfer", label: "Y坐标", required: true, type: "number", step: "0.000001" }
+                { name: "x_transfer", label: "经度", required: true, type: "number", step: "0.000001" },
+                { name: "y_transfer", label: "纬度", required: true, type: "number", step: "0.000001" }
             ],
             tableColumns: [
                 { key: "ogc_fid", label: "ID" },
                 { key: "name", label: "学校名称" },
                 { key: "related_address", label: "相关地址" },
-                { key: "x_transfer", label: "X坐标", format: (val) => val.toFixed(6) },
-                { key: "y_transfer", label: "Y坐标", format: (val) => val.toFixed(6) },
+                { key: "x_transfer", label: "经度", format: (val) => val.toFixed(6) },
+                { key: "y_transfer", label: "纬度", format: (val) => val.toFixed(6) },
                 { key: "operate", label: "操作" }
             ]
         }
     };
 
     // 全局变量
-    let currentPoiType = "publicservices";
+    let currentPoiType = "wuhanmetro";
     let currentEditId = null;
     let dataModal = new bootstrap.Modal(document.getElementById('dataModal'));
     let deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
