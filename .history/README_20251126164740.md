@@ -1,0 +1,61 @@
+# 测绘工程案例第15组 - 开发环境配置指南
+
+
+## 1. 创建虚拟环境
+
+推荐使用 **Anaconda** 进行 Python 环境管理。如果您的电脑未使用 Anaconda，请确保安装了 Python 3.10+，并跳过创建步骤直接进行依赖安装。
+
+**创建环境：**
+
+```bash
+conda create -n flask-dev python=3.10
+```
+
+**激活环境：**
+
+```bash
+conda activate flask-dev
+```
+
+## 2. 安装依赖库
+
+在激活的虚拟环境中安装项目所需的第三方库。
+
+**当前基础依赖：**
+
+```bash
+pip install flask
+```
+
+> **注意**：如果在后续开发过程中添加了新的库（例如 `pandas`, `numpy` 等），请务必在此处更新记录，或者生成 `requirements.txt` 文件：
+>
+> `pip freeze > requirements.txt`
+
+## 3. 启动应用
+
+在终端（Terminal）或命令行中，确保当前路径在项目根目录下，运行以下命令：
+
+```bash
+python app.py
+```
+
+**启动成功示例：**
+
+终端将输出类似以下内容，表示服务器已成功运行：
+
+```text
+ * Serving Flask app 'app'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on http://127.0.0.1:5000
+Press CTRL+C to quit
+```
+
+## 4. 访问应用
+
+打开浏览器，访问以下地址即可查看项目效果：
+
+[http://127.0.0.1:5000](http://127.0.0.1:5000)
+
+---
+**提示**：如需停止服务器，请在终端窗口按 `CTRL + C`。

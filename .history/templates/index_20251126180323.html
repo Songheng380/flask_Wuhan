@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>武汉市数据管理系统 - 高德地图版</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        #container { height: 500px; margin-top: 10px; }
+        .query-panel { background: #f8f9fa; padding: 15px; border-radius: 5px; }
+        .result-item { border-bottom: 1px solid #eee; padding: 6px 0; }
+        .status-hint {
+            font-size: 0.875rem;
+            color: #e67700;
+            margin-top: 6px;
+        }
+    </style>
+</head>
+<body>
+<div class="container mt-4">
+    <h2 class="text-center mb-4">武汉市主城区数据管理系统</h2>
+
+    <div class="row">
+        <!-- 查询面板 -->
+        <div class="col-md-4">
+            <div class="query-panel">
+                <h5>属性查询</h5>
+                <input type="text" id="keyword" class="form-control mb-2" placeholder="输入关键词，如'学校'">
+                <button class="btn btn-primary btn-sm" onclick="searchByKeyword()">搜索</button>
+            </div>
+
+            <div class="query-panel mt-3">
+                <h5>范围查询</h5>
+                <button class="btn btn-warning btn-sm mb-2" onclick="startRangeQuery()">
+                    🖱️ 开始框选
+                </button>
+                <div id="rangeHint" class="status-hint" style="display:none;">
+                    请在地图上按住鼠标拖拽绘制区域...
+                </div>
+                <button class="btn btn-success btn-sm" onclick="clearMarkers()">清除结果</button>
+            </div>
+        </div>
+
+        <!-- 地图容器 -->
+        <div class="col-md-8">
+            <div id="container"></div>
+        </div>
+    </div>
+
+    <!-- 查询结果列表 -->
+    <div class="mt-4" id="results"></div>
+</div>
+
+
+
+// ====== 加载初始POI数据 ======
+fetch('/api/search?q=')
+    .then(res => res.json())
+    .then(data => addMarkers(data));
+
+// 添加标记到地图
+function addMarkers(pois) {
+    clearMarkers();
+    let markers = [];
+    pois.forEach(poi => {
+        const marker = new AMap.Marker({
+            position: [poi.lon, poi.lat],
+            title: poi.name
+        });
+
+        const content = `<div><strong>${poi.name}</strong><br>${poi.type} | ${poi.district}</div>`;
+
+        marker.on('click', () => {
+            infoWindow.setContent(content);
+            infoWindow.open(map, marker.getPosition());
+        });
+
+        marker.setMap(map);
+        markers.push(marker);
+    });
+    currentMarkers = markers;
+
+    if (pois.length > 0) {
+        const bounds = new AMap.Bounds();
+        pois.forEach(p => bounds.extend([p.lon, p.lat]));
+        map.setBounds(bounds, 50);
+    }
+}
+
+// 属性查询
+function searchByKeyword() {
+    const q = document.getElementById('keyword').value.trim();
+    if (!q) return;
+    fetch(`/api/search?q=${encodeURIComponent(q)}`)
+        .then(res => res.json())
+        .then(data => {
+            addMarkers(data);
+            showResults(data, '属性查询结果');
+        });
+}
+
+// 🔘 范围查询：点击按钮后进入绘制模式
+function startRangeQuery() {
+    if (rectangleTool) {
+        map.remove(rectangleTool);
+        rectangleTool = null;
+    }
+    isSelecting = true;
+    document.getElementById('rangeHint').style.display = 'block';
+}
+
+// 清除标记
+function clearMarkers() {
+    currentMarkers.forEach(m => m.setMap(null));
+    currentMarkers = [];
+    if (rectangleTool) {
+        map.remove(rectangleTool);
+        rectangleTool = null;
+    }
+    isSelecting = false;
+    startPoint = null;
+    document.getElementById('rangeHint').style.display = 'none';
+}
+
+// 显示属性查询结果
+function showResults(items, title) {
+    let html = `<h5>${title} (${items.length} 条)</h5>`;
+    if (items.length === 0) {
+        html += '<p>未找到匹配结果。</p>';
+    } else {
+        html += '<div class="list-group">';
+        items.forEach(item => {
+            html += `
+                <div class="result-item">
+                    <strong>${item.name}</strong><br>
+                    <small>${item.type} · ${item.district}</small>
+                </div>`;
+        });
+        html += '</div>';
+    }
+    document.getElementById('results').innerHTML = html;
+}
+
+
+
+// 暴露函数给全局（供 onclick 调用）
+window.searchByKeyword = searchByKeyword;
+window.clearMarkers = clearMarkers;
+
+</script>
+</body>
+</html>

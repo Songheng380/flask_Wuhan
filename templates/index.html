@@ -1,0 +1,367 @@
+  
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>武汉市数据管理系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        /* 全局设置 */
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* 防止滚动条 */
+        }
+
+        .app-layout {
+            display: flex;
+            gap: 20px;
+            padding: 20px;
+            height: calc(100vh - 40px); /* 减去 body padding */
+            box-sizing: border-box;
+        }
+
+        .sidebar {
+            width: 360px;
+            flex: 0 0 360px;
+            overflow: auto;
+            background: #fff;
+            border-radius: 6px;
+            padding: 15px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+        }
+
+        .map-area {
+            flex: 1 1 auto;
+            min-width: 0; /* 防止 flex 子项溢出 */
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            /* 不要 position: fixed! */
+        }
+
+        .query-panel {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 12px;
+        }
+
+        .result-item {
+            border-bottom: 1px solid #eee;
+            padding: 6px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-layout">
+        <div class="sidebar">
+            <h4 class="mb-3">武汉市主城区数据管理系统</h4>
+
+            <div class="query-panel">
+                <h5>图层切换</h5>
+                <select id="layerSelect" class="form-select mb-2">
+                    <option value="__none__">-- 请选择图层（矢量 / 影像） --</option>
+                </select>
+                <div class="text-muted small">底图使用 OpenStreetMap</div>
+            </div>
+
+            <div class="query-panel">
+                <h5>属性查询</h5>
+                <input type="text" id="keyword" class="form-control mb-2" placeholder="输入关键词，如'学校'">
+                <button class="btn btn-primary btn-sm" onclick="searchByKeyword()">搜索</button>
+            </div>
+
+            <div class="query-panel">
+                <h5>范围查询</h5>
+                <button class="btn btn-warning btn-sm mb-2" onclick="startBoxSelect()">开始框选</button>
+                <button class="btn btn-success btn-sm" onclick="clearResults()">清除</button>
+            </div>
+
+            <div id="results" class="mt-2"></div>
+        </div>
+
+        <!-- 地图区域 -->
+        <div class="map-area">
+            <div id="map"></div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // 初始化 Leaflet 地图
+        const map = L.map('map');
+
+        // 添加 OpenStreetMap 底图
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        // 初始视图：显示整个武汉的近似范围
+        const wuhanBounds = [[29.9, 113.8], [31.0, 114.7]]; // [[south, west],[north, east]]
+        map.fitBounds(wuhanBounds, {padding: [20,20]});
+
+        let currentLayerGroup = L.layerGroup().addTo(map);
+        let currentImageOverlay = null;
+        let currentLayerData = null;  // 保存当前显示的矢量图层数据（GeoJSON）
+        let currentLayerName = null;  // 保存当前选中的图层名称
+
+        // 加载可用图层并填充下拉
+        function loadLayerList(){
+            fetch('/api/layers')
+                .then(r=>r.json())
+                .then(data=>{
+                    const sel = document.getElementById('layerSelect');
+                    data.forEach(item=>{
+                        const opt = document.createElement('option');
+                        opt.value = item.name;
+                        opt.text = `${item.name} [${item.type}]`;
+                        sel.appendChild(opt);
+                    });
+                });
+        }
+
+        document.getElementById('layerSelect').addEventListener('change', function(){
+            const name = this.value;
+            currentLayerName = name;
+            currentLayerData = null;  // 清空之前的图层数据
+            
+            if(name === '__none__'){
+                clearMapLayers();
+                return;
+            }
+            // 清除已有
+            clearMapLayers();
+            // 先尝试取矢量
+            fetch(`/api/geojson/${name}`).then(r=>{
+                if(r.status===200) return r.json();
+                throw new Error('not vector');
+            }).then(geojson=>{
+                currentLayerData = geojson;  // 保存当前图层数据
+                const gj = L.geoJSON(geojson, {
+                    style: function(feature){
+                        return {color: '#3388ff', weight: 2, fillOpacity: 0.2};
+                    },
+                    pointToLayer: function(feature, latlng){
+                        return L.circleMarker(latlng, {radius:6, fillColor:'#ff5722', color:'#fff', weight:1, fillOpacity:0.9});
+                    },
+                    onEachFeature: function(feature, layer){
+                        // 为每个要素添加点击事件和弹窗
+                        let popupContent = '<div style="max-width: 200px;">';
+                        
+                        // 优先显示 name 或 Name 字段
+                        if(feature.properties){
+                            const props = feature.properties;
+                            // 查找名字字段（尝试常见的名字字段名）
+                            let name = props.name || props.Name || props.NAME || props['名称'] || '(无名称)';
+                            popupContent += `<b>${name}</b><br>`;
+                            
+                            // 显示其他属性（排除过长的属性）
+                            for(let key in props){
+                                if(key.toLowerCase() !== 'name' && props[key]){
+                                    const val = String(props[key]);
+                                    if(val.length < 100){
+                                        popupContent += `<small><b>${key}:</b> ${val}</small><br>`;
+                                    }
+                                }
+                            }
+                        }
+                        popupContent += '</div>';
+                        
+                        layer.bindPopup(popupContent);
+                        // 点击时自动打开弹窗
+                        layer.on('click', function(){
+                            this.openPopup();
+                        });
+                    }
+                }).addTo(currentLayerGroup);
+                map.fitBounds(gj.getBounds(), {padding:[20,20]});
+            }).catch(()=>{
+                // 如果不是矢量，尝试作为影像
+                fetch(`/api/imagery/${name}`).then(r=>r.json()).then(info=>{
+                    if(info && info.url && info.bounds){
+                        const bounds = [[info.bounds[0][0], info.bounds[0][1]],[info.bounds[1][0], info.bounds[1][1]]];
+                        currentImageOverlay = L.imageOverlay(info.url, bounds).addTo(map);
+                        map.fitBounds(bounds, {padding:[20,20]});
+                    }
+                }).catch(err=>console.error(err));
+            });
+        });
+
+        function clearMapLayers(){
+            currentLayerGroup.clearLayers();
+            if(currentImageOverlay){
+                map.removeLayer(currentImageOverlay);
+                currentImageOverlay = null;
+            }
+        }
+
+        // ====== POI 查询与显示（保留原有功能） ======
+        let resultMarkers = [];
+        function addMarkers(pois){
+            clearResults();
+            pois.forEach(poi=>{
+                const m = L.marker([poi.lat, poi.lon]).addTo(map).bindPopup(`<b>${poi.name}</b><br>${poi.type}`);
+                resultMarkers.push(m);
+            });
+            if(pois.length>0){
+                const bounds = L.latLngBounds(pois.map(p=>[p.lat,p.lon]));
+                map.fitBounds(bounds, {padding:[20,20]});
+            }
+        }
+
+        function clearResults(){
+            resultMarkers.forEach(m=>map.removeLayer(m));
+            resultMarkers = [];
+            document.getElementById('results').innerHTML = '';
+        }
+
+        function searchByKeyword(){
+            const kw = document.getElementById('keyword').value.trim();
+            if(!kw) return;
+            
+            // 如果当前选中的是某个矢量图层，从该图层中查询
+            if(currentLayerData && currentLayerData.features){
+                const results = currentLayerData.features.filter(feature => {
+                    if(!feature.properties) return false;
+                    const props = feature.properties;
+                    // 在所有属性中查找匹配的关键词
+                    for(let key in props){
+                        const val = String(props[key]).toLowerCase();
+                        if(val.includes(kw.toLowerCase())){
+                            return true;
+                        }
+                    }
+                    return false;
+                });
+                
+                // 高亮显示查询结果
+                displayLayerSearchResults(results, kw);
+            } else if(currentLayerName && currentLayerName !== '__none__'){
+                // 如果当前是影像或还未加载图层，提示用户
+                alert('请先选择一个矢量图层进行查询');
+            } else {
+                // 如果未选择图层，使用原有的 POI 查询
+                fetch(`/api/search?q=${encodeURIComponent(kw)}`).then(r=>r.json()).then(data=>{
+                    addMarkers(data);
+                    const html = data.map(d=>`<div class=\"result-item\"><b>${d.name}</b> ${d.type}</div>`).join('');
+                    document.getElementById('results').innerHTML = html;
+                });
+            }
+        }
+        
+        // 显示矢量图层查询结果（高亮并列出）
+        function displayLayerSearchResults(features, keyword){
+            clearResults();
+            
+            if(features.length === 0){
+                document.getElementById('results').innerHTML = '<div style="color: red;">未找到匹配的要素</div>';
+                return;
+            }
+            
+            // 清除当前图层，重新加载并高亮搜索结果
+            const resultIds = new Set();
+            const resultGeometries = [];
+            
+            features.forEach(feature => {
+                resultIds.add(feature);
+                if(feature.geometry){
+                    if(feature.geometry.type === 'Point'){
+                        resultGeometries.push([feature.geometry.coordinates[1], feature.geometry.coordinates[0]]);
+                    }
+                }
+            });
+            
+            // 重新绘制整个图层，搜索结果用不同样式
+            const gj = L.geoJSON(currentLayerData, {
+                style: function(feature){
+                    const isResult = features.includes(feature);
+                    if(isResult){
+                        return {color: '#ff0000', weight: 3, fillOpacity: 0.5};  // 红色高亮
+                    } else {
+                        return {color: '#3388ff', weight: 2, fillOpacity: 0.2};  // 原色
+                    }
+                },
+                pointToLayer: function(feature, latlng){
+                    const isResult = features.includes(feature);
+                    if(isResult){
+                        return L.circleMarker(latlng, {radius:8, fillColor:'#ff0000', color:'#fff', weight:2, fillOpacity:1.0});
+                    } else {
+                        return L.circleMarker(latlng, {radius:6, fillColor:'#3388ff', color:'#fff', weight:1, fillOpacity:0.6});
+                    }
+                },
+                onEachFeature: function(feature, layer){
+                    let popupContent = '<div style="max-width: 200px;">';
+                    if(feature.properties){
+                        const props = feature.properties;
+                        let name = props.name || props.Name || props.NAME || props['名称'] || '(无名称)';
+                        popupContent += `<b>${name}</b><br>`;
+                        for(let key in props){
+                            if(key.toLowerCase() !== 'name' && props[key]){
+                                const val = String(props[key]);
+                                if(val.length < 100){
+                                    popupContent += `<small><b>${key}:</b> ${val}</small><br>`;
+                                }
+                            }
+                        }
+                    }
+                    popupContent += '</div>';
+                    layer.bindPopup(popupContent);
+                    layer.on('click', function(){
+                        this.openPopup();
+                    });
+                }
+            }).addTo(currentLayerGroup);
+            
+            // 缩放到搜索结果
+            if(features.length > 0){
+                try {
+                    const bounds = gj.getBounds();
+                    if(bounds.isValid()){
+                        map.fitBounds(bounds, {padding:[20,20]});
+                    }
+                } catch(e){}
+            }
+            
+            // 在右侧结果栏显示查询结果
+            const html = features.map(f => {
+                let name = '(无名称)';
+                if(f.properties){
+                    name = f.properties.name || f.properties.Name || f.properties.NAME || f.properties['名称'] || '(无名称)';
+                }
+                return `<div class=\"result-item\" style="background: #ffe6e6; padding: 4px; border-radius: 3px;"><b>${name}</b></div>`;
+            }).join('');
+            document.getElementById('results').innerHTML = `<div style="font-size: 0.9em; color: #333;">找到 ${features.length} 个结果:</div>${html}`;
+        }
+
+        // 简单的矩形框选（通过 Leaflet Draw 可改进，这里做最小实现）
+        let boxStart = null;
+        let boxRect = null;
+        function startBoxSelect(){
+            map.getContainer().style.cursor = 'crosshair';
+            function onMouseDown(e){ boxStart = e.latlng; map.on('mousemove', onMouseMove); map.once('mouseup', onMouseUp); }
+            function onMouseMove(e){ if(boxRect){ boxRect.setBounds(L.latLngBounds(boxStart, e.latlng)); } else { boxRect = L.rectangle(L.latLngBounds(boxStart, e.latlng), {color:'#ffaa00', weight:1}).addTo(map); } }
+            function onMouseUp(e){ map.off('mousemove', onMouseMove); map.getContainer().style.cursor='';
+                const b = boxRect.getBounds();
+                // 调用后端 bbox 接口
+                const min_lon = b.getWest(), min_lat = b.getSouth(), max_lon = b.getEast(), max_lat = b.getNorth();
+                fetch(`/api/bbox?min_lon=${min_lon}&min_lat=${min_lat}&max_lon=${max_lon}&max_lat=${max_lat}`).then(r=>r.json()).then(data=>{ addMarkers(data); });
+                map.off('mousedown', onMouseDown);
+            }
+            map.on('mousedown', onMouseDown);
+        }
+
+        // 初始化调用
+        loadLayerList();
+        // 加载初始 POI（空查询相当于返回全部）
+        fetch('/api/search?q=').then(r=>r.json()).then(d=>addMarkers(d));
+        </script>
+    </body>
+</html>
