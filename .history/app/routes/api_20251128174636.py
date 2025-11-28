@@ -20,7 +20,8 @@ api = Blueprint('api', __name__)
 # api配置
 from app.config import SearchConfig
 
-# # 属性关键词查询（如“学校”、“商业”）
+# # 属性关键词查询（如“学校”）,现在是只查名字，而且只能查一次，还要改
+
 
 def load_poi_data():
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -30,7 +31,7 @@ def load_poi_data():
         return json.load(f)
 
 
-def search_poi(POI_DATA=None, keyword=None, FIELDS = SearchConfig.FIELDS):
+def search_poi(POI_DATA, keyword, DEBUG=SearchConfig.DEBUG, FIELDS = SearchConfig.FIELDS):
     """
     POI查询接口，支持按名称和类型关键词搜索
     参数：
@@ -38,9 +39,8 @@ def search_poi(POI_DATA=None, keyword=None, FIELDS = SearchConfig.FIELDS):
     输出：
         符合关键词的POI列表，JSON格式
     """
-    if SearchConfig.DEBUG:
+    if DEBUG:
         POI_DATA = load_poi_data()
-        keyword = request.args.get("q", "").strip()
     if not keyword:
         return jsonify([])
 
@@ -51,39 +51,30 @@ def search_poi(POI_DATA=None, keyword=None, FIELDS = SearchConfig.FIELDS):
     
     return jsonify(results)
 
+if SearchConfig.DEBUG:
+    api.add_url_rule('/search', view_func=search_poi)
+#
+#
+# # 矩形范围查询，还未实现，有误
+@api.route('/search')
+def bbox_query():
+    # 加载 POI 数据
+    sample = SearchConfig.sample
+    POI_DATA = load_poi_data() if sample else []  # 或加载完整数据
 
-    
-# 接收矩形框参数
-def get_bbox_params():
-    """
-    从请求中接收矩形框四个坐标
-    返回:
-        min_lon, min_lat, max_lon, max_lat (float)
-        如果参数缺失或错误，返回 None
-    """
+    # 获取矩形范围
     try:
         min_lon = float(request.args.get('min_lon'))
         min_lat = float(request.args.get('min_lat'))
         max_lon = float(request.args.get('max_lon'))
         max_lat = float(request.args.get('max_lat'))
-        print(f"✅ 收到矩形坐标: min_lon={min_lon}, min_lat={min_lat}, max_lon={max_lon}, max_lat={max_lat}")
-        return min_lon, min_lat, max_lon, max_lat
+        has_box = True
     except (TypeError, ValueError):
-        return None
-    
+        # 没有传 bbox 参数 → 使用全部 POI_DATA
+        has_box = False
 
-# 矩形范围查询
-@api.route('/search')
-def bbox_query():
-    # 加载 POI 测试数据
-    POI_DATA = load_poi_data() if SearchConfig.DEBUG else []
-
-    # 获取矩形范围
-    coords = get_bbox_params()
-    print(coords)
-    if coords:
-        print("✅ 进行矩形范围过滤")
-        min_lon, min_lat, max_lon, max_lat = coords
+    # 1. 根据是否传入 bbox 决定是否过滤
+    if has_box:
         filtered = [
             item for item in POI_DATA
             if min_lon <= item.get("lon", 9999) <= max_lon
@@ -92,30 +83,11 @@ def bbox_query():
     else:
         filtered = POI_DATA
 
-    # 关键字搜索
-    keyword = request.args.get("q", "").strip().lower()
-    if keyword:
-        filtered = [
-            item for item in filtered
-            if keyword in item.get("name", "").lower()
-            or keyword in item.get("type", "").lower()
-            or keyword in item.get("district", "").lower()
-        ]
+    # 2. 再按 keyword 搜索（如果有）
+    keyword = request.args.get("q", "").strip()
+    results = search_poi(filtered, keyword)
 
-    return jsonify(filtered)
-
-# @api.route('/search')
-# def search_handler():
-#     if SearchConfig.DEBUG_POI_SERACH:
-#         return search_poi()
-#     else:
-#         return bbox_query()
-
-# if SearchConfig.DEBUG_POI_SEARCH:
-#     api.add_url_rule('/search', view_func=search_poi)
-# else:
-#     api.add_url_rule('/search', view_func=bbox_query)
-
+    return jsonify(results)
 
 @api.route('/test-db', methods=['GET'])
 def test_db_connection():

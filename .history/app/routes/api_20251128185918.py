@@ -82,7 +82,6 @@ def bbox_query():
     coords = get_bbox_params()
     print(coords)
     if coords:
-        print("✅ 进行矩形范围过滤")
         min_lon, min_lat, max_lon, max_lat = coords
         filtered = [
             item for item in POI_DATA

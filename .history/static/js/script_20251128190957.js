@@ -59,7 +59,7 @@ function searchByKeyword() {
 
 // 通用数据请求函数
 function fetchData(query) {
-    url = `/api/search?q=${encodeURIComponent(query)}`;
+    const url = `/api/search?q=${encodeURIComponent(query)}`;
     if (currentRectangle) {
         const bounds = currentRectangle.getBounds();
         url += `&min_lon=${bounds.getSouthWest().lng}&min_lat=${bounds.getSouthWest().lat}&max_lon=${bounds.getNorthEast().lng}&max_lat=${bounds.getNorthEast().lat}`;

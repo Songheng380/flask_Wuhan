@@ -17,20 +17,11 @@ from app.models.wuhan_primary_school import WuhanPrimarySchool
 
 api = Blueprint('api', __name__)
 
-# api配置
-from app.config import SearchConfig
-
-# # 属性关键词查询（如“学校”、“商业”）
-
-def load_poi_data():
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    poi_path = os.path.join(BASE_DIR, "../../data/poi_sample.json")
-    poi_path = os.path.normpath(poi_path)
-    with open(poi_path, "r", encoding="utf-8") as f:
-        return json.load(f)
 
 
-def search_poi(POI_DATA=None, keyword=None, FIELDS = SearchConfig.FIELDS):
+# # 属性关键词查询（如“学校”）,现在是只查名字，而且只能查一次，还要改
+@api.route('/search')
+def search_poi(sample=False):
     """
     POI查询接口，支持按名称和类型关键词搜索
     参数：
@@ -38,84 +29,41 @@ def search_poi(POI_DATA=None, keyword=None, FIELDS = SearchConfig.FIELDS):
     输出：
         符合关键词的POI列表，JSON格式
     """
-    if SearchConfig.DEBUG:
-        POI_DATA = load_poi_data()
-        keyword = request.args.get("q", "").strip()
+    sample = request.args.get('sample', 'false').lower() == 'true'
+    if sample:
+        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+        POI_FILE = os.path.join(BASE_DIR, "../../data/poi_sample.json")
+        POI_FILE = os.path.normpath(POI_FILE)
+        with open(POI_FILE, "r", encoding="utf-8") as f:
+            POI_DATA = json.load(f)
+            
+    keyword = request.args.get('q', '').strip()
     if not keyword:
         return jsonify([])
 
     results = [
         item for item in POI_DATA
-        if any(keyword in item.get(field, "").lower() for field in FIELDS)
+        if keyword.lower() in item['name'].lower() or keyword.lower() in item['type'].lower() or keyword.lower() in item['district'].lower()
     ]
-    
     return jsonify(results)
-
-
-    
-# 接收矩形框参数
-def get_bbox_params():
-    """
-    从请求中接收矩形框四个坐标
-    返回:
-        min_lon, min_lat, max_lon, max_lat (float)
-        如果参数缺失或错误，返回 None
-    """
-    try:
-        min_lon = float(request.args.get('min_lon'))
-        min_lat = float(request.args.get('min_lat'))
-        max_lon = float(request.args.get('max_lon'))
-        max_lat = float(request.args.get('max_lat'))
-        print(f"✅ 收到矩形坐标: min_lon={min_lon}, min_lat={min_lat}, max_lon={max_lon}, max_lat={max_lat}")
-        return min_lon, min_lat, max_lon, max_lat
-    except (TypeError, ValueError):
-        return None
-    
-
-# 矩形范围查询
-@api.route('/search')
-def bbox_query():
-    # 加载 POI 测试数据
-    POI_DATA = load_poi_data() if SearchConfig.DEBUG else []
-
-    # 获取矩形范围
-    coords = get_bbox_params()
-    print(coords)
-    if coords:
-        print("✅ 进行矩形范围过滤")
-        min_lon, min_lat, max_lon, max_lat = coords
-        filtered = [
-            item for item in POI_DATA
-            if min_lon <= item.get("lon", 9999) <= max_lon
-            and min_lat <= item.get("lat", 9999) <= max_lat
-        ]
-    else:
-        filtered = POI_DATA
-
-    # 关键字搜索
-    keyword = request.args.get("q", "").strip().lower()
-    if keyword:
-        filtered = [
-            item for item in filtered
-            if keyword in item.get("name", "").lower()
-            or keyword in item.get("type", "").lower()
-            or keyword in item.get("district", "").lower()
-        ]
-
-    return jsonify(filtered)
-
-# @api.route('/search')
-# def search_handler():
-#     if SearchConfig.DEBUG_POI_SERACH:
-#         return search_poi()
-#     else:
-#         return bbox_query()
-
-# if SearchConfig.DEBUG_POI_SEARCH:
-#     api.add_url_rule('/search', view_func=search_poi)
-# else:
-#     api.add_url_rule('/search', view_func=bbox_query)
-
+#
+#
+# # 矩形范围查询，还未实现，有误
+# @api.route('/bbox')
+# def bbox_query():
+#     try:
+#         min_lon = float(request.args.get('min_lon'))
+#         min_lat = float(request.args.get('min_lat'))
+#         max_lon = float(request.args.get('max_lon'))
+#         max_lat = float(request.args.get('max_lat'))
+#     except (TypeError, ValueError):
+#         return jsonify([])
+#
+#     results = [
+#         item for item in POI_DATA
+#         if min_lon <= item['lon'] <= max_lon and min_lat <= item['lat'] <= max_lat
+#     ]
+#     return jsonify(results)
 
 @api.route('/test-db', methods=['GET'])
 def test_db_connection():

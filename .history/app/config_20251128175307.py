@@ -9,4 +9,4 @@ class Config:
 class SearchConfig:
     FIELDS = ["name", "type", "district"]
     DEBUG = True # 是否开启调试模式
-    DEBUG_POI_SEARCH = False # 单独调试POI搜索功能
+    DEBUG_POI_SERACH = True # 单独调试POI搜索功能

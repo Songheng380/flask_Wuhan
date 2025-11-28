@@ -59,11 +59,8 @@ function searchByKeyword() {
 
 // 通用数据请求函数
 function fetchData(query) {
-    url = `/api/search?q=${encodeURIComponent(query)}`;
-    if (currentRectangle) {
-        const bounds = currentRectangle.getBounds();
-        url += `&min_lon=${bounds.getSouthWest().lng}&min_lat=${bounds.getSouthWest().lat}&max_lon=${bounds.getNorthEast().lng}&max_lat=${bounds.getNorthEast().lat}`;
-    }
+    const url = `/api/search?q=${encodeURIComponent(query)}`;
+
     return fetch(url)
         .then(response => {
             if (!response.ok) {
@@ -137,20 +134,13 @@ function addMarkers(pois) {
         map.setBounds(validBounds);
     }
 }
-
 function startRangeQuery() {
     if (!map) return;
 
-    // 关闭已有工具
+    // 关闭已有工具，但不要清除 currentRectangle
     if (rectangleTool) {
         rectangleTool.close();
         rectangleTool = null;
-    }
-
-    // 删除已有矩形，只保留一个
-    if (currentRectangle) {
-        currentRectangle.setMap(null);  // 从地图上移除
-        currentRectangle = null;
     }
 
     rectangleTool = new AMap.MouseTool(map);
@@ -163,29 +153,13 @@ function startRangeQuery() {
     });
 
     rectangleTool.on('draw', function (event) {
-        currentRectangle = event.obj;  // 保留新的矩形对象
+        currentRectangle = event.obj;  // 保留引用
         document.getElementById('rangeHint').style.display = 'none';
 
-        const bounds = currentRectangle.getBounds();
-        const southwest = bounds.getSouthWest();
-        const northeast = bounds.getNorthEast();
-
-        const coords = {
-            min_lon: southwest.lng,
-            min_lat: southwest.lat,
-            max_lon: northeast.lng,
-            max_lat: northeast.lat
-        };
-
-        console.log("矩形坐标:", coords);
-
-        // 可以选择关闭工具，让用户只能绘制一次
-        rectangleTool.close();
-        rectangleTool = null;
+        // 不关闭 rectangleTool，这样 clearMarkers 才能安全操作
+        console.log("矩形绘制完成:", currentRectangle);
     });
 }
-
-
 
 
 window.startRangeQuery = startRangeQuery;
@@ -195,18 +169,18 @@ function clearMarkers() {
     currentMarkers.forEach(marker => marker.setMap(null));
     currentMarkers = [];
 
-    // 清除矩形
-    if (currentRectangle) {
-        currentRectangle.setMap(null);
-        currentRectangle = null;
-    }
-    // 关闭绘制工具
-    if (rectangleTool) {
-        rectangleTool.close();
-        rectangleTool = null;
-    }
+    // // 清除矩形
+    // if (currentRectangle) {
+    //     currentRectangle.setMap(null);
+    //     currentRectangle = null;
+    // }
+    // // 关闭绘制工具
+    // if (rectangleTool) {
+    //     rectangleTool.close();
+    //     rectangleTool = null;
+    // }
 
-    document.getElementById('rangeHint').style.display = 'none';
+    // document.getElementById('rangeHint').style.display = 'none';
 }
 
 

@@ -80,9 +80,7 @@ def bbox_query():
 
     # 获取矩形范围
     coords = get_bbox_params()
-    print(coords)
     if coords:
-        print("✅ 进行矩形范围过滤")
         min_lon, min_lat, max_lon, max_lat = coords
         filtered = [
             item for item in POI_DATA
@@ -111,10 +109,10 @@ def bbox_query():
 #     else:
 #         return bbox_query()
 
-# if SearchConfig.DEBUG_POI_SEARCH:
-#     api.add_url_rule('/search', view_func=search_poi)
-# else:
-#     api.add_url_rule('/search', view_func=bbox_query)
+if SearchConfig.DEBUG_POI_SEARCH:
+    api.add_url_rule('/search', view_func=search_poi)
+else:
+    api.add_url_rule('/search', view_func=bbox_query)
 
 
 @api.route('/test-db', methods=['GET'])

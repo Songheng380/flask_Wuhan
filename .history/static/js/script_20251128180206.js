@@ -3,7 +3,9 @@ let map = null;
 let infoWindow = null;
 let currentMarkers = []; 
 let rectangleTool = null;
-let currentRectangle = null; // 保存矩形对象
+let isSelecting = false;
+let currentRectangle = null; // 全局变量
+
 
 // 初始化地图
 function initMap() {
@@ -30,7 +32,7 @@ function initMap() {
         });
 
         // 页面加载完成后，自动加载一次全部数据
-        //fetchData('');
+        fetchData('');
 
     } catch (error) {
         console.error("地图初始化失败:", error);
@@ -45,13 +47,14 @@ document.addEventListener('DOMContentLoaded', initMap);
 function searchByKeyword() {
     const keywordInput = document.getElementById('keyword');
     const q = keywordInput.value.trim();
+    
+    console.log(`正在搜索: "${q}"`); // Debug日志
 
-    console.log(`正在搜索: "${q}"`);
-
-    // 禁用输入框防止重复提交
+    // 禁用输入框防止重复提交，直到请求结束
     keywordInput.disabled = true;
-
+    
     fetchData(q).finally(() => {
+        // 请求结束后（无论成功失败），恢复输入框
         keywordInput.disabled = false;
         keywordInput.focus();
     });
@@ -59,11 +62,8 @@ function searchByKeyword() {
 
 // 通用数据请求函数
 function fetchData(query) {
-    url = `/api/search?q=${encodeURIComponent(query)}`;
-    if (currentRectangle) {
-        const bounds = currentRectangle.getBounds();
-        url += `&min_lon=${bounds.getSouthWest().lng}&min_lat=${bounds.getSouthWest().lat}&max_lon=${bounds.getNorthEast().lng}&max_lat=${bounds.getNorthEast().lat}`;
-    }
+    const url = `/api/search?q=${encodeURIComponent(query)}`;
+
     return fetch(url)
         .then(response => {
             if (!response.ok) {
@@ -72,63 +72,69 @@ function fetchData(query) {
             return response.json();
         })
         .then(data => {
-            console.log("后端返回的数据数量:", data.length);
-            
-            // 注意这里只清除标记，不清除矩形
-            clearMarkersOnly();
-
+            console.log("后端返回的原始数据 (前1条):", data[0]);
+            clearMarkers();
             addMarkers(data);
             showResults(data, query ? `"${query}" 的搜索结果` : '全部数据');
         })
         .catch(error => {
-            console.error("❌ 错误:", error);
+            console.error("❌ 严重错误:", error);
             alert("发生错误: " + error.message);
         });
 }
 
-// 只清除标记，不清除矩形或工具
-function clearMarkersOnly() {
-    currentMarkers.forEach(marker => marker.setMap(null));
-    currentMarkers = [];
-}
-
-// 添加标记
+// 地图标记操作
 function addMarkers(pois) {
     if (!map) return;
 
-    const newMarkers = [];
-    const validBounds = new AMap.Bounds();
+    let newMarkers = [];
+    let validBounds = new AMap.Bounds();
     let hasValidData = false;
 
     pois.forEach((poi, index) => {
-        const lon = parseFloat(poi.lon || poi.lng || poi.x || poi.longitude);
-        const lat = parseFloat(poi.lat || poi.y || poi.latitude);
+        try {
+            let rawLon = poi.lon || poi.lng || poi.x || poi.longitude;
+            let rawLat = poi.lat || poi.y || poi.latitude;
 
-        if (isNaN(lon) || isNaN(lat)) {
-            console.warn(`第 ${index} 条数据坐标无效，跳过:`, poi);
-            return;  // 彻底过滤
+            let lon = parseFloat(rawLon);
+            let lat = parseFloat(rawLat);
+
+            if (isNaN(lon) || isNaN(lat)) {
+                // 遇到坏数据时才在控制台警告
+                console.warn(`第 ${index} 条数据坐标无效 (lon:${rawLon}, lat:${rawLat})，已跳过。`);
+                return; 
+            }
+
+            const marker = new AMap.Marker({
+                position: [lon, lat],
+                title: poi.name,
+                map: map
+            });
+
+            // 内容展示防空判断
+            const name = poi.name || "无名称";
+            const type = poi.type || "未知类型";
+            const district = poi.district || "";
+
+            const content = `
+                <div style="padding:5px;">
+                    <strong>${name}</strong><br>
+                    <span style="color:#666;font-size:12px;">${type} | ${district}</span>
+                </div>`;
+
+            marker.on('click', () => {
+                infoWindow.setContent(content);
+                infoWindow.open(map, marker.getPosition());
+            });
+
+            newMarkers.push(marker);
+            validBounds.extend([lon, lat]);
+            hasValidData = true;
+
+        } catch (err) {
+            console.error(`第 ${index} 条数据创建标记失败:`, err);
+            // 捕获错误，保证循环继续执行，不会触发外部的 catch
         }
-
-        const marker = new AMap.Marker({
-            position: [lon, lat],
-            title: poi.name,
-            map: map
-        });
-
-        const content = `
-            <div style="padding:5px;">
-                <strong>${poi.name || "无名称"}</strong><br>
-                <span style="color:#666;font-size:12px;">${poi.type || "未知类型"} | ${poi.district || ""}</span>
-            </div>`;
-
-        marker.on('click', () => {
-            const pos = marker.getPosition();
-            if (!pos || isNaN(pos.lng) || isNaN(pos.lat)) return; // ✅ 关键检查
-            infoWindow.setContent(content);
-            infoWindow.open(map, pos);
-        });
-
-        newMarkers.push(marker);
     });
 
     currentMarkers = newMarkers;
@@ -138,22 +144,22 @@ function addMarkers(pois) {
     }
 }
 
+// 启动矩形框选
 function startRangeQuery() {
     if (!map) return;
 
-    // 关闭已有工具
+    // 当前已有矩形工具则清除
     if (rectangleTool) {
         rectangleTool.close();
         rectangleTool = null;
     }
 
-    // 删除已有矩形，只保留一个
-    if (currentRectangle) {
-        currentRectangle.setMap(null);  // 从地图上移除
-        currentRectangle = null;
-    }
-
+    // 创建新的 MouseTool
     rectangleTool = new AMap.MouseTool(map);
+
+    // 进入矩形绘制模式
+    isSelecting = true;
+    document.getElementById('rangeHint').style.display = 'block';
 
     rectangleTool.rectangle({
         strokeColor: "#0099FF",
@@ -162,44 +168,50 @@ function startRangeQuery() {
         fillOpacity: 0.15
     });
 
+    // 监听矩形绘制完成事件
     rectangleTool.on('draw', function (event) {
-        currentRectangle = event.obj;  // 保留新的矩形对象
-        document.getElementById('rangeHint').style.display = 'none';
+        const rect = event.obj;
 
-        const bounds = currentRectangle.getBounds();
-        const southwest = bounds.getSouthWest();
-        const northeast = bounds.getNorthEast();
+        // 获取矩形范围
+        const bounds = rect.getBounds();
 
-        const coords = {
+        const southwest = bounds.getSouthWest();  // 左下
+        const northeast = bounds.getNorthEast();  // 右上
+
+        const result = {
             min_lon: southwest.lng,
             min_lat: southwest.lat,
             max_lon: northeast.lng,
             max_lat: northeast.lat
         };
 
-        console.log("矩形坐标:", coords);
+        console.log("矩形范围坐标:", result);
 
-        // 可以选择关闭工具，让用户只能绘制一次
+        // 清除提示
+        document.getElementById('rangeHint').style.display = 'none';
+
+        // 关闭绘制工具，保留矩形
         rectangleTool.close();
-        rectangleTool = null;
+        isSelecting = false;
+
+        // TODO: 在这里你可以发请求到后端
+        // fetchRangePOI(result);
     });
 }
-
-
-
 
 window.startRangeQuery = startRangeQuery;
 
 function clearMarkers() {
-    // 清除标记
+    // 清除所有标记
     currentMarkers.forEach(marker => marker.setMap(null));
     currentMarkers = [];
 
     // 清除矩形
     if (currentRectangle) {
-        currentRectangle.setMap(null);
+        currentRectangle.setMap(null); // 移除矩形
         currentRectangle = null;
     }
+
     // 关闭绘制工具
     if (rectangleTool) {
         rectangleTool.close();

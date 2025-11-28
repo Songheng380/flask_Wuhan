@@ -59,11 +59,8 @@ function searchByKeyword() {
 
 // 通用数据请求函数
 function fetchData(query) {
-    url = `/api/search?q=${encodeURIComponent(query)}`;
-    if (currentRectangle) {
-        const bounds = currentRectangle.getBounds();
-        url += `&min_lon=${bounds.getSouthWest().lng}&min_lat=${bounds.getSouthWest().lat}&max_lon=${bounds.getNorthEast().lng}&max_lat=${bounds.getNorthEast().lat}`;
-    }
+    const url = `/api/search?q=${encodeURIComponent(query)}`;
+
     return fetch(url)
         .then(response => {
             if (!response.ok) {
@@ -74,10 +71,10 @@ function fetchData(query) {
         .then(data => {
             console.log("后端返回的数据数量:", data.length);
             
-            // 注意这里只清除标记，不清除矩形
+            // ❌ 注意这里只清除标记，不清除矩形
             clearMarkersOnly();
 
-            addMarkers(data);
+            // addMarkers(data);
             showResults(data, query ? `"${query}" 的搜索结果` : '全部数据');
         })
         .catch(error => {
@@ -104,10 +101,7 @@ function addMarkers(pois) {
         const lon = parseFloat(poi.lon || poi.lng || poi.x || poi.longitude);
         const lat = parseFloat(poi.lat || poi.y || poi.latitude);
 
-        if (isNaN(lon) || isNaN(lat)) {
-            console.warn(`第 ${index} 条数据坐标无效，跳过:`, poi);
-            return;  // 彻底过滤
-        }
+        if (isNaN(lon) || isNaN(lat)) return;
 
         const marker = new AMap.Marker({
             position: [lon, lat],
@@ -122,13 +116,13 @@ function addMarkers(pois) {
             </div>`;
 
         marker.on('click', () => {
-            const pos = marker.getPosition();
-            if (!pos || isNaN(pos.lng) || isNaN(pos.lat)) return; // ✅ 关键检查
             infoWindow.setContent(content);
-            infoWindow.open(map, pos);
+            infoWindow.open(map, marker.getPosition());
         });
 
         newMarkers.push(marker);
+        validBounds.extend([lon, lat]);
+        hasValidData = true;
     });
 
     currentMarkers = newMarkers;
@@ -137,20 +131,13 @@ function addMarkers(pois) {
         map.setBounds(validBounds);
     }
 }
-
 function startRangeQuery() {
     if (!map) return;
 
-    // 关闭已有工具
+    // 关闭已有工具，但不要清除 currentRectangle
     if (rectangleTool) {
         rectangleTool.close();
         rectangleTool = null;
-    }
-
-    // 删除已有矩形，只保留一个
-    if (currentRectangle) {
-        currentRectangle.setMap(null);  // 从地图上移除
-        currentRectangle = null;
     }
 
     rectangleTool = new AMap.MouseTool(map);
@@ -163,29 +150,13 @@ function startRangeQuery() {
     });
 
     rectangleTool.on('draw', function (event) {
-        currentRectangle = event.obj;  // 保留新的矩形对象
+        currentRectangle = event.obj;  // 保留引用
         document.getElementById('rangeHint').style.display = 'none';
 
-        const bounds = currentRectangle.getBounds();
-        const southwest = bounds.getSouthWest();
-        const northeast = bounds.getNorthEast();
-
-        const coords = {
-            min_lon: southwest.lng,
-            min_lat: southwest.lat,
-            max_lon: northeast.lng,
-            max_lat: northeast.lat
-        };
-
-        console.log("矩形坐标:", coords);
-
-        // 可以选择关闭工具，让用户只能绘制一次
-        rectangleTool.close();
-        rectangleTool = null;
+        // 不关闭 rectangleTool，这样 clearMarkers 才能安全操作
+        console.log("矩形绘制完成:", currentRectangle);
     });
 }
-
-
 
 
 window.startRangeQuery = startRangeQuery;
@@ -195,18 +166,18 @@ function clearMarkers() {
     currentMarkers.forEach(marker => marker.setMap(null));
     currentMarkers = [];
 
-    // 清除矩形
-    if (currentRectangle) {
-        currentRectangle.setMap(null);
-        currentRectangle = null;
-    }
-    // 关闭绘制工具
-    if (rectangleTool) {
-        rectangleTool.close();
-        rectangleTool = null;
-    }
+    // // 清除矩形
+    // if (currentRectangle) {
+    //     currentRectangle.setMap(null);
+    //     currentRectangle = null;
+    // }
+    // // 关闭绘制工具
+    // if (rectangleTool) {
+    //     rectangleTool.close();
+    //     rectangleTool = null;
+    // }
 
-    document.getElementById('rangeHint').style.display = 'none';
+    // document.getElementById('rangeHint').style.display = 'none';
 }
 
 

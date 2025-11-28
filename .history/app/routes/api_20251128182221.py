@@ -51,8 +51,10 @@ def search_poi(POI_DATA=None, keyword=None, FIELDS = SearchConfig.FIELDS):
     
     return jsonify(results)
 
-
-    
+if SearchConfig.DEBUG_POI_SERACH:
+    api.add_url_rule('/search', view_func=search_poi)
+else:
+    api.add_url_rule('/search', view_func=search_poi)
 # 接收矩形框参数
 def get_bbox_params():
     """
@@ -73,6 +75,7 @@ def get_bbox_params():
     
 
 # 矩形范围查询
+
 @api.route('/search')
 def bbox_query():
     # 加载 POI 测试数据
@@ -80,9 +83,7 @@ def bbox_query():
 
     # 获取矩形范围
     coords = get_bbox_params()
-    print(coords)
     if coords:
-        print("✅ 进行矩形范围过滤")
         min_lon, min_lat, max_lon, max_lat = coords
         filtered = [
             item for item in POI_DATA
@@ -103,19 +104,6 @@ def bbox_query():
         ]
 
     return jsonify(filtered)
-
-# @api.route('/search')
-# def search_handler():
-#     if SearchConfig.DEBUG_POI_SERACH:
-#         return search_poi()
-#     else:
-#         return bbox_query()
-
-# if SearchConfig.DEBUG_POI_SEARCH:
-#     api.add_url_rule('/search', view_func=search_poi)
-# else:
-#     api.add_url_rule('/search', view_func=bbox_query)
-
 
 @api.route('/test-db', methods=['GET'])
 def test_db_connection():
