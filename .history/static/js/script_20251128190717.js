@@ -59,7 +59,7 @@ function searchByKeyword() {
 
 // 通用数据请求函数
 function fetchData(query) {
-    url = `/api/search?q=${encodeURIComponent(query)}`;
+    const url = `/api/search?q=${encodeURIComponent(query)}`;
     if (currentRectangle) {
         const bounds = currentRectangle.getBounds();
         url += `&min_lon=${bounds.getSouthWest().lng}&min_lat=${bounds.getSouthWest().lat}&max_lon=${bounds.getNorthEast().lng}&max_lat=${bounds.getNorthEast().lat}`;
@@ -141,16 +141,9 @@ function addMarkers(pois) {
 function startRangeQuery() {
     if (!map) return;
 
-    // 关闭已有工具
     if (rectangleTool) {
         rectangleTool.close();
         rectangleTool = null;
-    }
-
-    // 删除已有矩形，只保留一个
-    if (currentRectangle) {
-        currentRectangle.setMap(null);  // 从地图上移除
-        currentRectangle = null;
     }
 
     rectangleTool = new AMap.MouseTool(map);
@@ -163,7 +156,7 @@ function startRangeQuery() {
     });
 
     rectangleTool.on('draw', function (event) {
-        currentRectangle = event.obj;  // 保留新的矩形对象
+        currentRectangle = event.obj;  // 保留矩形对象
         document.getElementById('rangeHint').style.display = 'none';
 
         const bounds = currentRectangle.getBounds();
@@ -176,15 +169,8 @@ function startRangeQuery() {
             max_lon: northeast.lng,
             max_lat: northeast.lat
         };
-
-        console.log("矩形坐标:", coords);
-
-        // 可以选择关闭工具，让用户只能绘制一次
-        rectangleTool.close();
-        rectangleTool = null;
     });
 }
-
 
 
 

@@ -54,6 +54,7 @@ def search_poi(POI_DATA=None, keyword=None, FIELDS = SearchConfig.FIELDS):
 
     
 # 接收矩形框参数
+@api.route('/get_bbox_params', methods=['GET'])
 def get_bbox_params():
     """
     从请求中接收矩形框四个坐标
