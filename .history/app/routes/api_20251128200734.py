@@ -22,11 +22,9 @@ from app.config import SearchConfig
 
 # 初始化wordvec配置
 from app.routes.wordvec import load_chinese_vectors, cosine_similarity, vectorize_text
-if SearchConfig.ifWordVec:
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    WORD_VECTORS = load_chinese_vectors(os.path.join(BASE_DIR, "./src/sgns.target.word-word.dynwin5.thr10.neg5.dim300.iter5"), max_words=500000)
-else:
-    WORD_VECTORS = None
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+WORD_VECTORS = load_chinese_vectors(os.path.join(BASE_DIR, "./src/sgns.target.word-word.dynwin5.thr10.neg5.dim300.iter5"), max_words=500000)
+
 # # 属性关键词查询（如“学校”、“商业”）
 
 def load_poi_data():
@@ -43,7 +41,7 @@ def search_poi(POI_DATA=None, keyword=None, FIELDS=SearchConfig.FIELDS):
     2. 模糊查询 exact=false
     3. 语义查询 mode=semantic
     """
-    if SearchConfig.DEBUG_POI_SEARCH:
+    if SearchConfig.DEBUG:
         POI_DATA = load_poi_data()
 
     keyword = request.args.get("q", "").strip().lower()

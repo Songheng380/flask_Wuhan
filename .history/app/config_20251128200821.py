@@ -11,4 +11,4 @@ class SearchConfig:
     DEBUG = True # 是否开启调试模式
     DEBUG_POI_SEARCH = False # 单独调试POI搜索功能
     searchListNum = 10
-    ifWordVec = False  # 是否启用词向量进行语义搜索
+    ifWordVec = True  # 是否启用词向量进行语义搜索
