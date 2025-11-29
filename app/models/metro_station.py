@@ -2,6 +2,7 @@
 from app import db
 from geoalchemy2 import Geometry  # 处理PostGIS空间类型
 
+
 class MetroStation(db.Model):
     # 指定表所属的schema和表名
     __tablename__ = '武汉市地铁站点'
