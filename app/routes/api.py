@@ -64,8 +64,7 @@ else:
     WORD_VECTORS = None
 
 # ========================== 矢量与栅格数据处理 ==========================
-# 数据目录（指向项目根目录的 data 文件夹）
-DATA_DIR = Path(__file__).parent.parent.parent / "data"
+
 
 # 如果 shapefile 缺失 .shx，尝试让 GDAL 自动恢复（优先使用 osgeo.gdal）
 try:
@@ -74,7 +73,6 @@ try:
 except Exception:
     # 如果没有安装 GDAL Python 绑定，设置环境变量作为备用
     os.environ.setdefault('SHAPE_RESTORE_SHX', 'YES')
-
 
 def load_db_layer_as_geojson(layer_name):
     """从数据库查询矢量图层并返回 GeoJSON FeatureCollection。
@@ -270,7 +268,7 @@ def search_poi(POI_DATA=None, keyword=None, FIELDS=SearchConfig.FIELDS):
     支持三种查询模式：
     1. 精确查询 exact=true
     2. 模糊查询 exact=false
-    3. 语义查询 mode=semantic
+    3. 语义查询 mode=semantic,没继续做
     """
     if SearchConfig.DEBUG_POI_SEARCH:
         POI_DATA = load_poi_data()
