@@ -108,7 +108,7 @@ def publicservices_add():
         longitude = float(data['longitude'])
         latitude = float(data['latitude'])
         # 创建空间几何对象（WGS84坐标系）
-        geometry = func.ST_SetSRID(func.ST_MakePoint(longitude, latitude), 4326)
+        geometry = func.ST_SetSRID(func.ST_MakePoint(longitude, latitude), 900915)
 
         # 实例化新数据
         new_item = PublicServices(
@@ -165,7 +165,7 @@ def publicservices_update():
             latitude = float(data['latitude'])
             item.longitude = longitude
             item.latitude = latitude
-            item.geometry = func.ST_SetSRID(func.ST_MakePoint(longitude, latitude), 4326)
+            item.geometry = func.ST_SetSRID(func.ST_MakePoint(longitude, latitude), 900915)
 
         # 提交更新
         db.session.commit()
@@ -290,7 +290,7 @@ def wuhanmetro_add():
         lon = float(data['lon_wgs84'])
         lat = float(data['lat_wgs84'])
         # 创建空间几何对象（WGS84坐标系）
-        geometry = func.ST_SetSRID(func.ST_MakePoint(lon, lat), 4326)
+        geometry = func.ST_SetSRID(func.ST_MakePoint(lon, lat), 900915)
 
         # 实例化新数据
         new_item = MetroStation(
@@ -343,7 +343,7 @@ def wuhanmetro_update():
             lat = float(data['lat_wgs84'])
             item.lon_wgs84 = lon
             item.lat_wgs84 = lat
-            item.geometry = func.ST_SetSRID(func.ST_MakePoint(lon, lat), 4326)
+            item.geometry = func.ST_SetSRID(func.ST_MakePoint(lon, lat), 900915)
 
         # 提交更新
         db.session.commit()
@@ -464,7 +464,7 @@ def wuhanmiddleschool_add():
         x = float(data['longitude'])
         y = float(data['latitude'])
         # 创建空间几何对象
-        geometry = func.ST_SetSRID(func.ST_MakePoint(x, y), 4326)
+        geometry = func.ST_SetSRID(func.ST_MakePoint(x, y), 900915)
 
         # 实例化新数据
         new_item = WuhanMiddleSchool(
@@ -513,7 +513,7 @@ def wuhanmiddleschool_update():
             y = float(data['latitude'])
             item.longitude = x
             item.latitude = y
-            item.geometry = func.ST_SetSRID(func.ST_MakePoint(x, y), 4326)
+            item.geometry = func.ST_SetSRID(func.ST_MakePoint(x, y), 900915)
 
         # 提交更新
         db.session.commit()
@@ -634,7 +634,7 @@ def wuhanprimaryschool_add():
         x = float(data['longitude'])
         y = float(data['latitude'])
         # 创建空间几何对象
-        geometry = func.ST_SetSRID(func.ST_MakePoint(x, y), 4326)
+        geometry = func.ST_SetSRID(func.ST_MakePoint(x, y), 900915)
 
         # 实例化新数据
         new_item = WuhanPrimarySchool(
@@ -683,7 +683,7 @@ def wuhanprimaryschool_update():
             y = float(data['latitude'])
             item.longitude = x
             item.latitude = y
-            item.geometry = func.ST_SetSRID(func.ST_MakePoint(x, y), 4326)
+            item.geometry = func.ST_SetSRID(func.ST_MakePoint(x, y), 900915)
 
         # 提交更新
         db.session.commit()
@@ -808,7 +808,7 @@ def wuhanmetroline_add():
 
         # 构建LINESTRING字符串
         line_string = f"LINESTRING({','.join([f'{point[0]} {point[1]}' for point in coordinates])})"
-        geometry = func.ST_SetSRID(func.ST_GeomFromText(line_string), 4326)
+        geometry = func.ST_SetSRID(func.ST_GeomFromText(line_string), 900915)
 
         # 实例化新数据
         new_item = MetroLine(
@@ -860,7 +860,7 @@ def wuhanmetroline_update():
                 return jsonify({"code": 400, "msg": "线要素至少需要2个点坐标"}), 400
 
             line_string = f"LINESTRING({','.join([f'{point[0]} {point[1]}' for point in coordinates])})"
-            item.geometry = func.ST_SetSRID(func.ST_GeomFromText(line_string), 4326)
+            item.geometry = func.ST_SetSRID(func.ST_GeomFromText(line_string), 900915)
 
         # 提交更新
         db.session.commit()

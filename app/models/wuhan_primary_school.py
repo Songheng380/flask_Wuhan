@@ -10,7 +10,7 @@ class WuhanPrimarySchool(db.Model):
 
     # 匹配数据库表字段
     ogc_fid = db.Column(db.Integer, primary_key=True, autoincrement=True)  # 自增主键
-    geometry = db.Column(Geometry(geometry_type='POINT', srid=4326))
+    geometry = db.Column(Geometry(geometry_type='POINT', srid=900915))
     longitude = db.Column(db.Numeric(18, 11), name='x_transfer')
     latitude = db.Column(db.Numeric(18, 11), name='y_transfer')
     name = db.Column(db.String(254), name='名称')  # 英文变量name → 映射数据库中文字段“名称”

@@ -10,7 +10,7 @@ class MetroStation(db.Model):
 
     # 匹配数据库表字段
     ogc_fid = db.Column(db.Integer, primary_key=True, autoincrement=True)  # 自增主键
-    geometry = db.Column(Geometry(geometry_type='POINT', srid=4326))
+    geometry = db.Column(Geometry(geometry_type='POINT', srid=900915))
     name = db.Column(db.String(80))
     line = db.Column(db.String(80))
     color = db.Column(db.String(80))

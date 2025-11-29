@@ -14,14 +14,14 @@ const POI_CONFIG = {
             { key: "fid", label: "ID" },
             { key: "name", label: "名称" },
             { key: "type", label: "类型" },
-            { key: "district", label: "区域" },
             { key: "address", label: "地址" },
+            { key: "longitude", label: "经度"},
+            { key: "latitude", label: "纬度"},
             { key: "operate", label: "操作" }
         ],
         formFields: [
             { key: "name", label: "名称", type: "text", required: true },
             { key: "type", label: "类型", type: "text", required: true },
-            { key: "district", label: "区域", type: "text" },
             { key: "address", label: "地址", type: "text" },
             { key: "longitude", label: "经度", type: "number", step: "0.000001", required: true },
             { key: "latitude", label: "纬度", type: "number", step: "0.000001", required: true }
@@ -37,6 +37,8 @@ const POI_CONFIG = {
             { key: "line", label: "线路" },
             { key: "color", label: "线路颜色" },
             { key: "transfer", label: "换乘信息" },
+            { key: "lon_wgs84", label: "经度"},
+            { key: "lat_wgs84", label: "纬度"},
             { key: "operate", label: "操作" }
         ],
         formFields: [
@@ -44,8 +46,8 @@ const POI_CONFIG = {
             { key: "line", label: "线路", type: "text", required: true },
             { key: "color", label: "线路颜色", type: "text" },
             { key: "transfer", label: "换乘信息", type: "text" },
-            { key: "longitude", label: "经度", type: "number", step: "0.000001", required: true },
-            { key: "latitude", label: "纬度", type: "number", step: "0.000001", required: true }
+            { key: "lon_wgs84", label: "经度", type: "number", step: "0.000001", required: true },
+            { key: "lat_wgs84", label: "纬度", type: "number", step: "0.000001", required: true }
         ]
     },
     wuhanmiddleschool: {
@@ -179,6 +181,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // 分页按钮初始禁用
+    document.getElementById('prevPageBtn').disabled = true;
+    document.getElementById('nextPageBtn').disabled = true;
+
     // 初始化时先渲染表头
     renderTableHeader();
 
@@ -220,7 +226,7 @@ async function loadData(page) {
         const result = await response.json();
 
         if (result.data) {
-            // 渲染表格（保持不变）
+            // 渲染表格
             tableBody.innerHTML = '';
             result.data.forEach(item => {
                 const row = document.createElement('tr');
@@ -301,15 +307,6 @@ async function loadData(page) {
     }
 }
 
-// 初始化页面（调整分页按钮绑定）
-document.addEventListener('DOMContentLoaded', () => {
-    // 原绑定逻辑保持不变...
-
-    // 分页按钮初始禁用
-    document.getElementById('prevPageBtn').disabled = true;
-    document.getElementById('nextPageBtn').disabled = true;
-});
-
 // 打开新增模态框
 function openAddModal() {
     currentEditId = null;
@@ -327,12 +324,12 @@ function openAddModal() {
                 <label for="form-${field.key}" class="form-label">
                     ${field.label} ${field.required ? '<span class="text-danger">*</span>' : ''}
                 </label>
-                ${field.type === 'textarea' ? 
-                    `<textarea class="form-control" id="form-${field.key}" 
+                ${field.type === 'textarea' ?
+                    `<textarea class="form-control" id="form-${field.key}"
                               ${field.required ? 'required' : ''}
                               placeholder="${field.placeholder || ''}"
-                              rows="4"></textarea>` : 
-                    `<input type="${field.type}" class="form-control" id="form-${field.key}" 
+                              rows="4"></textarea>` :
+                    `<input type="${field.type}" class="form-control" id="form-${field.key}"
                            ${field.required ? 'required' : ''}
                            placeholder="${field.placeholder || ''}"
                            value="${field.defaultValue || ''}">`
@@ -341,7 +338,9 @@ function openAddModal() {
         `;
     });
 
-    $('#editModal').modal('show');
+    // 使用Bootstrap原生API打开模态框
+    const editModal = new bootstrap.Modal(document.getElementById('editModal'));
+    editModal.show();
 }
 
 // 打开编辑模态框
@@ -372,12 +371,12 @@ async function openEditModal(id) {
                         <label for="form-${field.key}" class="form-label">
                             ${field.label} ${field.required ? '<span class="text-danger">*</span>' : ''}
                         </label>
-                        ${field.type === 'textarea' ? 
-                            `<textarea class="form-control" id="form-${field.key}" 
+                        ${field.type === 'textarea' ?
+                            `<textarea class="form-control" id="form-${field.key}"
                                       ${field.required ? 'required' : ''}
                                       placeholder="${field.placeholder || ''}"
-                                      rows="4">${displayValue}</textarea>` : 
-                            `<input type="${field.type}" class="form-control" id="form-${field.key}" 
+                                      rows="4">${displayValue}</textarea>` :
+                            `<input type="${field.type}" class="form-control" id="form-${field.key}"
                                    ${field.required ? 'required' : ''}
                                    placeholder="${field.placeholder || ''}"
                                    value="${displayValue}">`
@@ -386,7 +385,9 @@ async function openEditModal(id) {
                 `;
             });
 
-            $('#editModal').modal('show');
+            // 使用Bootstrap原生API打开模态框
+            const editModal = new bootstrap.Modal(document.getElementById('editModal'));
+            editModal.show();
         } else {
             alert(result.msg || '获取数据失败');
         }
@@ -419,7 +420,7 @@ async function submitForm() {
             if (field.type === 'number') {
                 formData[field.key] = parseFloat(value);
             } else if (field.key === 'coordinates') {
-                // 解析坐标JSON（修复空间数据提交问题）
+                // 解析坐标JSON
                 try {
                     formData[field.key] = JSON.parse(value);
                 } catch (e) {
@@ -441,8 +442,8 @@ async function submitForm() {
     }
 
     try {
-        const url = currentEditId 
-            ? `${config.apiPrefix}/update` 
+        const url = currentEditId
+            ? `${config.apiPrefix}/update`
             : `${config.apiPrefix}/add`;
 
         const response = await fetch(url, {
@@ -454,7 +455,9 @@ async function submitForm() {
         const result = await response.json();
         if (result.code === 200) {
             alert(currentEditId ? '更新成功' : '新增成功');
-            $('#editModal').modal('hide');
+            // 使用Bootstrap原生API关闭模态框
+            const editModal = bootstrap.Modal.getInstance(document.getElementById('editModal'));
+            editModal.hide();
             loadData(currentPage);
         } else {
             alert(result.msg || '操作失败');
@@ -469,9 +472,12 @@ async function submitForm() {
 function openDeleteModal(id) {
     currentDeleteId = id;
     const config = POI_CONFIG[currentPoiType];
-    document.getElementById('deleteConfirmText').textContent = 
+    document.getElementById('deleteConfirmText').textContent =
         `确定要删除ID为${id}的${config.label}数据吗？`;
-    $('#deleteModal').modal('show');
+
+    // 使用Bootstrap原生API打开模态框
+    const deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
+    deleteModal.show();
 }
 
 // 确认删除
@@ -489,7 +495,9 @@ async function confirmDelete() {
         const result = await response.json();
         if (result.code === 200) {
             alert('删除成功');
-            $('#deleteModal').modal('hide');
+            // 使用Bootstrap原生API关闭模态框
+            const deleteModal = bootstrap.Modal.getInstance(document.getElementById('deleteModal'));
+            deleteModal.hide();
             loadData(currentPage);
         } else {
             alert(result.msg || '删除失败');
