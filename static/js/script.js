@@ -150,25 +150,26 @@ function searchByKeyword(){
     // 如果选中了矢量图层，从该图层中查询
     if(currentLayerData && currentLayerData.features){
         const mode = document.querySelector('input[name="queryMode"]:checked').value;
+        const t0 = performance.now();
         const results = currentLayerData.features.filter(feature => {
             if(!feature.properties) return false;
             const props = feature.properties;
-            
+
             if(mode === 'exact'){
                 return Object.values(props).some(v => String(v).toLowerCase() === kw.toLowerCase());
             } else {
                 return Object.values(props).some(v => String(v).toLowerCase().includes(kw.toLowerCase()));
             }
         });
-        
-        displayLayerSearchResults(results, kw);
+        const elapsedMs = Math.round(performance.now() - t0);
+        displayLayerSearchResults(results, kw, elapsedMs);
     } else if(currentLayerName && currentLayerName !== '__none__'){
         alert('当前图层不支持查询或未完全加载，请选择矢量图层');
     }
 }
 
 // 显示图层查询结果
-function displayLayerSearchResults(features, keyword){
+function displayLayerSearchResults(features, keyword, elapsedMs){
     clearResults();
     clearMapLayers();
     
@@ -236,7 +237,12 @@ function displayLayerSearchResults(features, keyword){
                     <b>${name}</b>
                 </div>`;
     }).join('');
-    document.getElementById('results').innerHTML = `<div style="font-weight: bold; margin-bottom: 8px;">找到 ${features.length} 个结果:</div>${html}`;
+    let header = `<div style="font-weight: bold; margin-bottom: 8px;">找到 ${features.length} 个结果`;
+    if(typeof elapsedMs === 'number'){
+        header += ` （查询耗时: ${elapsedMs} ms)`;
+    }
+    header += ':</div>';
+    document.getElementById('results').innerHTML = header + html;
 }
 
 // 清除结果
@@ -303,12 +309,13 @@ function startBoxSelect(){
         
         // 在当前图层中执行范围查询
         if(currentLayerData && currentLayerData.features){
+            const t0 = performance.now();
             const results = currentLayerData.features.filter(feature => {
                 if(!feature.geometry) return false;
-                
+
                 const geomType = feature.geometry.type;
                 const coords = feature.geometry.coordinates;
-                
+
                 if(geomType === 'Point'){
                     // Point: [lon, lat]
                     const lon = coords[0];
@@ -323,7 +330,8 @@ function startBoxSelect(){
                 }
                 return false;
             });
-            displayLayerSearchResults(results, '矩形范围内');
+            const elapsedMs = Math.round(performance.now() - t0);
+            displayLayerSearchResults(results, '矩形范围内', elapsedMs);
         }
         
         boxStart = null;
