@@ -22,6 +22,16 @@ DB_LAYERS_CONFIG = {
         'fields': ['name', 'line', 'color', 'transfer'],
         'coords': ('lon_wgs84', 'lat_wgs84')
     },
+        '武汉地铁线路': {  
+        'model': MetroLine,
+        'fields': ['name', 'layer', 'origin', 'destination'],  
+        'coords': None,  
+    },
+    '地铁十分钟等时圈': {
+        'model': Metro10minWaitCircle,
+        'fields': ['name', 'aa_mins', 'aa_mode', 'total_pop', 'center_lon', 'center_lat'],
+        'coords': None  
+    },
     '公共服务': {
         'model': PublicServices,
         'fields': ['name', 'type', 'address', 'category'],
@@ -37,6 +47,7 @@ DB_LAYERS_CONFIG = {
         'fields': ['name', 'related_address'],
         'coords': ('longitude', 'latitude')
     }
+
 }
 
 api = Blueprint('api', __name__)
@@ -63,8 +74,6 @@ try:
 except Exception:
     # 如果没有安装 GDAL Python 绑定，设置环境变量作为备用
     os.environ.setdefault('SHAPE_RESTORE_SHX', 'YES')
-
-# 本项目改为：矢量全部由数据库提供，不再自动扫描或加载本地 shapefile/geojson/tif
 
 
 def load_db_layer_as_geojson(layer_name):
@@ -242,7 +251,7 @@ def get_geojson(layer_name):
 @api.route('/imagery/<layer_name>', methods=['GET'])
 def get_imagery(layer_name):
     """获取指定栅格图层的 URL 和 bounds"""
-    # 本接口不再提供本地栅格自动加载，如需栅格请通过单独服务托管或扩展此处实现
+    
     return jsonify({}), 404
 
 
