@@ -8,8 +8,8 @@ class PublicServices(db.Model):
     __table_args__ = {'schema': 'wuhan_sum'}  # 绑定到wuhan_sum schema
 
     # 匹配数据库表字段
-    fid = db.Column(db.Numeric(10, 0), primary_key=True)
-    geometry = db.Column(Geometry(geometry_type='POINT', srid=4326))  # 空间点（WGS84）
+    fid = db.Column(db.Numeric(10, 0), primary_key=True, autoincrement=True)
+    geometry = db.Column(Geometry(geometry_type='POINT', srid=900915))  # 空间点（WGS84）
     type = db.Column(db.String(254))
     gridcode = db.Column(db.Float)
     typecode = db.Column(db.String(254))
