@@ -9,6 +9,8 @@ from sqlalchemy import func
 
 # 数据模型
 from app.models.metro_station import MetroStation
+from app.models.metro_line import MetroLine
+from app.models.metro_10min_wait_circle import Metro10minWaitCircle
 from app.models.public_services import PublicServices
 from app.models.wuhan_middle_school import WuhanMiddleSchool
 from app.models.wuhan_primary_school import WuhanPrimarySchool

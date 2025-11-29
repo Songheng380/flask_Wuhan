@@ -1,422 +1,501 @@
-document.addEventListener('DOMContentLoaded', function() {
-    // POI配置：适配四个类型的接口和字段
-    const POI_CONFIG = {
-        publicservices: {
-            label: "公共服务",
-            apiPrefix: "/admin/publicservices",
-            primaryKey: "fid",
-            fields: [
-                { name: "name", label: "名称", required: true, type: "text" },
-                { name: "type", label: "类型", required: true, type: "text" },
-                { name: "address", label: "地址", required: false, type: "text" },
-                { name: "longitude_wgs84", label: "经度", required: true, type: "number", step: "0.000001" },
-                { name: "latitude_wgs84", label: "纬度", required: true, type: "number", step: "0.000001" },
-                { name: "category", label: "分类", required: false, type: "text" }
-            ],
-            tableColumns: [
-                { key: "fid", label: "ID" },
-                { key: "name", label: "名称" },
-                { key: "type", label: "类型" },
-                { key: "address", label: "地址" },
-                { key: "longitude_wgs84", label: "经度", format: (val) => val.toFixed(6) },
-                { key: "latitude_wgs84", label: "纬度", format: (val) => val.toFixed(6) },
-                { key: "category", label: "分类" },
-                { key: "operate", label: "操作" }
-            ]
-        },
-        wuhanmetro: {
-            label: "武汉市地铁站点",
-            apiPrefix: "/admin/wuhanmetro",
-            primaryKey: "ogc_fid",
-            fields: [
-                { name: "name", label: "站点名称", required: true, type: "text" },
-                { name: "line", label: "线路", required: true, type: "text" },
-                { name: "color", label: "线路颜色", required: false, type: "text" },
-                { name: "lon_wgs84", label: "经度(WGS84)", required: true, type: "number", step: "0.000001" },
-                { name: "lat_wgs84", label: "纬度(WGS84)", required: true, type: "number", step: "0.000001" },
-                { name: "transfer", label: "换乘站", required: false, type: "text" }
-            ],
-            tableColumns: [
-                { key: "ogc_fid", label: "ID" },
-                { key: "name", label: "站点名称" },
-                { key: "line", label: "线路" },
-                { key: "color", label: "线路颜色" },
-                { key: "lon_wgs84", label: "经度", format: (val) => val.toFixed(6) },
-                { key: "lat_wgs84", label: "纬度", format: (val) => val.toFixed(6) },
-                { key: "transfer", label: "换乘站" },
-                { key: "operate", label: "操作" }
-            ]
-        },
-        wuhanmiddleschool: {
-            label: "武汉市中学",
-            apiPrefix: "/admin/wuhanmiddleschool",
-            primaryKey: "ogc_fid",
-            fields: [
-                { name: "name", label: "学校名称", required: true, type: "text" },
-                { name: "related_address", label: "相关地址", required: false, type: "text" },
-                { name: "x_transfer", label: "经度", required: true, type: "number", step: "0.000001" },
-                { name: "y_transfer", label: "纬度", required: true, type: "number", step: "0.000001" }
-            ],
-            tableColumns: [
-                { key: "ogc_fid", label: "ID" },
-                { key: "name", label: "学校名称" },
-                { key: "related_address", label: "相关地址" },
-                { key: "x_transfer", label: "经度", format: (val) => val.toFixed(6) },
-                { key: "y_transfer", label: "纬度", format: (val) => val.toFixed(6) },
-                { key: "operate", label: "操作" }
-            ]
-        },
-        wuhanprimaryschool: {
-            label: "武汉市小学",
-            apiPrefix: "/admin/wuhanprimaryschool",
-            primaryKey: "ogc_fid",
-            fields: [
-                { name: "name", label: "学校名称", required: true, type: "text" },
-                { name: "related_address", label: "相关地址", required: false, type: "text" },
-                { name: "x_transfer", label: "经度", required: true, type: "number", step: "0.000001" },
-                { name: "y_transfer", label: "纬度", required: true, type: "number", step: "0.000001" }
-            ],
-            tableColumns: [
-                { key: "ogc_fid", label: "ID" },
-                { key: "name", label: "学校名称" },
-                { key: "related_address", label: "相关地址" },
-                { key: "x_transfer", label: "经度", format: (val) => val.toFixed(6) },
-                { key: "y_transfer", label: "纬度", format: (val) => val.toFixed(6) },
-                { key: "operate", label: "操作" }
-            ]
-        }
-    };
+// 当前页码与选中的POI类型
+let currentPage = 1;
+let currentPoiType = 'wuhanmetro';
+let currentEditId = null;
+let currentDeleteId = null;
 
-    // 全局变量
-    let currentPoiType = "wuhanmetro";
-    let currentEditId = null;
-    let dataModal = new bootstrap.Modal(document.getElementById('dataModal'));
-    let deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
-    let currentPage = 1;
-    const pageSize = 15;
-    let totalCount = 0;
-
-    // 初始化
-    initTableHeader();
-    loadData(currentPage, pageSize);
-    bindEvents();
-
-    /**
-     * 初始化表头（适配CSS中table-dark样式）
-     */
-    function initTableHeader() {
-        const columns = POI_CONFIG[currentPoiType].tableColumns;
-        const headerEl = document.getElementById('tableHeader');
-        headerEl.innerHTML = columns.map(col => `<th>${col.label}</th>`).join('');
+// 所有POI类型配置
+const POI_CONFIG = {
+    publicservices: {
+        label: "公共服务",
+        apiPrefix: "/admin/publicservices",
+        primaryKey: "fid",
+        tableColumns: [
+            { key: "fid", label: "ID" },
+            { key: "name", label: "名称" },
+            { key: "type", label: "类型" },
+            { key: "district", label: "区域" },
+            { key: "address", label: "地址" },
+            { key: "operate", label: "操作" }
+        ],
+        formFields: [
+            { key: "name", label: "名称", type: "text", required: true },
+            { key: "type", label: "类型", type: "text", required: true },
+            { key: "district", label: "区域", type: "text" },
+            { key: "address", label: "地址", type: "text" },
+            { key: "longitude", label: "经度", type: "number", step: "0.000001", required: true },
+            { key: "latitude", label: "纬度", type: "number", step: "0.000001", required: true }
+        ]
+    },
+    wuhanmetro: {
+        label: "武汉市地铁站点",
+        apiPrefix: "/admin/wuhanmetro",
+        primaryKey: "ogc_fid",
+        tableColumns: [
+            { key: "ogc_fid", label: "ID" },
+            { key: "name", label: "站点名称" },
+            { key: "line", label: "线路" },
+            { key: "color", label: "线路颜色" },
+            { key: "transfer", label: "换乘信息" },
+            { key: "operate", label: "操作" }
+        ],
+        formFields: [
+            { key: "name", label: "站点名称", type: "text", required: true },
+            { key: "line", label: "线路", type: "text", required: true },
+            { key: "color", label: "线路颜色", type: "text" },
+            { key: "transfer", label: "换乘信息", type: "text" },
+            { key: "longitude", label: "经度", type: "number", step: "0.000001", required: true },
+            { key: "latitude", label: "纬度", type: "number", step: "0.000001", required: true }
+        ]
+    },
+    wuhanmiddleschool: {
+        label: "武汉市中学",
+        apiPrefix: "/admin/wuhanmiddleschool",
+        primaryKey: "ogc_fid",
+        tableColumns: [
+            { key: "ogc_fid", label: "ID" },
+            { key: "name", label: "学校名称" },
+            { key: "related_address", label: "地址" },
+            { key: "longitude", label: "经度" },
+            { key: "latitude", label: "纬度" },
+            { key: "operate", label: "操作" }
+        ],
+        formFields: [
+            { key: "name", label: "学校名称", type: "text", required: true },
+            { key: "related_address", label: "地址", type: "text" },
+            { key: "longitude", label: "经度", type: "number", step: "0.000001", required: true },
+            { key: "latitude", label: "纬度", type: "number", step: "0.000001", required: true }
+        ]
+    },
+    wuhanprimaryschool: {
+        label: "武汉市小学",
+        apiPrefix: "/admin/wuhanprimaryschool",
+        primaryKey: "ogc_fid",
+        tableColumns: [
+            { key: "ogc_fid", label: "ID" },
+            { key: "name", label: "学校名称" },
+            { key: "related_address", label: "地址" },
+            { key: "longitude", label: "经度" },
+            { key: "latitude", label: "纬度" },
+            { key: "operate", label: "操作" }
+        ],
+        formFields: [
+            { key: "name", label: "学校名称", type: "text", required: true },
+            { key: "related_address", label: "地址", type: "text" },
+            { key: "longitude", label: "经度", type: "number", step: "0.000001", required: true },
+            { key: "latitude", label: "纬度", type: "number", step: "0.000001", required: true }
+        ]
+    },
+    wuhanmetroline: {
+        label: "武汉市地铁线路",
+        apiPrefix: "/admin/wuhanmetroline",
+        primaryKey: "ogc_fid",
+        tableColumns: [
+            { key: "ogc_fid", label: "ID" },
+            { key: "name", label: "线路名称" },
+            { key: "layer", label: "图层信息" },
+            { key: "origin", label: "始发站" },
+            { key: "destination", label: "终点站" },
+            { key: "operate", label: "操作" }
+        ],
+        formFields: [
+            { key: "name", label: "线路名称", type: "text", required: true },
+            { key: "layer", label: "图层信息", type: "text" },
+            { key: "origin", label: "始发站", type: "text" },
+            { key: "destination", label: "终点站", type: "text" },
+            { key: "coordinates", label: "线路坐标", type: "textarea", required: true,
+              placeholder: "格式: [[x1,y1], [x2,y2], ...]（至少2个点，英文逗号分隔）" }
+        ]
+    },
+    metro10mincircle: {
+        label: "地铁十分钟等时圈",
+        apiPrefix: "/admin/metro10mincircle",
+        primaryKey: "fid",
+        tableColumns: [
+            { key: "fid", label: "ID" },
+            { key: "name", label: "等时圈名称" },
+            { key: "id", label: "标识ID" },
+            { key: "center_lon", label: "中心经度" },
+            { key: "center_lat", label: "中心纬度" },
+            { key: "aa_mins", label: "等时时间" },
+            { key: "aa_mode", label: "交通方式" },
+            { key: "total_pop", label: "覆盖人口" },
+            { key: "operate", label: "操作" }
+        ],
+        formFields: [
+            { key: "name", label: "等时圈名称", type: "text", required: true },
+            { key: "id", label: "标识ID", type: "text" },
+            { key: "center_lon", label: "中心经度", type: "number", step: "0.000001", required: true },
+            { key: "center_lat", label: "中心纬度", type: "number", step: "0.000001", required: true },
+            { key: "aa_mins", label: "等时时间", type: "text", defaultValue: "10" },
+            { key: "aa_mode", label: "交通方式", type: "text", defaultValue: "地铁" },
+            { key: "total_pop", label: "覆盖人口", type: "text" },
+            { key: "coordinates", label: "面要素坐标", type: "textarea", required: true,
+              placeholder: "格式: [[[x1,y1], [x2,y2], ..., [x1,y1]]]（闭合多边形，至少3个点）" }
+        ]
     }
+};
 
-    /**
-     * 加载数据（适配CSS中空数据/加载提示样式）
-     */
-    async function loadData(page = 1, pageSize = 15, keyword = "") {
-        currentPage = page;
-        const config = POI_CONFIG[currentPoiType];
-        const loadingTip = document.getElementById('loadingTip');
-        const emptyTip = document.getElementById('emptyTip');
-        const tableBody = document.getElementById('tableBody');
+// 初始化页面
+document.addEventListener('DOMContentLoaded', () => {
+    // 绑定POI类型切换事件
+    document.getElementById('poiType').addEventListener('change', (e) => {
+        currentPoiType = e.target.value;
+        currentPage = 1;
+        // 切换类型时先渲染表头
+        renderTableHeader();
+        loadData(currentPage);
+    });
 
-        // 显示加载状态
-        loadingTip.classList.remove('d-none');
-        emptyTip.classList.add('d-none');
-        tableBody.innerHTML = '';
+    // 绑定搜索按钮事件
+    document.getElementById('searchBtn').addEventListener('click', () => {
+        currentPage = 1;
+        loadData(currentPage);
+    });
+
+    // 绑定新增按钮事件
+    document.getElementById('addBtn').addEventListener('click', openAddModal);
+
+    // 绑定测试数据库连接按钮事件
+    document.getElementById('testDbBtn').addEventListener('click', async () => {
+        const btn = document.getElementById('testDbBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 测试中...';
 
         try {
-            const apiUrl = new URL(`${config.apiPrefix}/search`, window.location.origin);
-            apiUrl.searchParams.append('q', encodeURIComponent(keyword));
-            apiUrl.searchParams.append('page', page);
-            apiUrl.searchParams.append('pageSize', pageSize);
-
-            const response = await fetch(apiUrl.toString());
+            const response = await fetch('http://127.0.0.1:5000/api/test_db');
             const result = await response.json();
-            const dataList = result.data || [];
-            totalCount = result.total || 0;
 
-            // 渲染表格数据（适配CSS中table-hover样式）
-            renderTableBody(dataList, config.tableColumns, config.primaryKey);
-            // 渲染分页（适配CSS中pagination样式）
-            renderPagination();
-            // 显示空数据提示
-            emptyTip.classList.toggle('d-none', dataList.length > 0);
+            if (result.code === 200) {
+                alert('数据库连接成功！');
+            } else {
+                alert('数据库连接失败：' + result.msg);
+            }
         } catch (error) {
-            console.error("加载数据失败：", error);
-            alert("加载数据失败，请刷新重试");
+            alert('请求失败：' + error.message);
         } finally {
-            loadingTip.classList.add('d-none');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-database-check"></i> 测试数据库连接';
         }
-    }
+    });
 
-    /**
-     * 渲染表格内容（适配CSS中表格单元格padding和hover效果）
-     */
-    function renderTableBody(dataList, columns, primaryKey) {
-        const tableBody = document.getElementById('tableBody');
-        if (dataList.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="100%" class="text-center text-muted">暂无数据</td></tr>';
-            return;
+    // 初始化时先渲染表头
+    renderTableHeader();
+
+    // 初始化加载数据
+    loadData(currentPage);
+});
+
+// 渲染表格表头
+function renderTableHeader() {
+    const config = POI_CONFIG[currentPoiType];
+    const tableHeader = document.getElementById('tableHeader');
+    tableHeader.innerHTML = ''; // 清空原有表头
+
+    // 根据配置渲染表头列
+    config.tableColumns.forEach(col => {
+        const th = document.createElement('th');
+        th.textContent = col.label;
+        tableHeader.appendChild(th);
+    });
+}
+
+// 加载数据列表
+async function loadData(page) {
+    const config = POI_CONFIG[currentPoiType];
+    const keyword = document.getElementById('searchInput').value.trim();
+    const tableBody = document.getElementById('dataTableBody');
+    const pageNumberContainer = document.getElementById('pageNumberContainer');
+    const prevPageBtn = document.getElementById('prevPageBtn');
+    const nextPageBtn = document.getElementById('nextPageBtn');
+
+    try {
+        // 构建请求URL
+        const url = new URL(`${config.apiPrefix}/search`, window.location.origin);
+        url.searchParams.set('page', page);
+        url.searchParams.set('pageSize', 15);
+        url.searchParams.set('q', keyword);
+
+        const response = await fetch(url);
+        const result = await response.json();
+
+        if (result.data) {
+            // 渲染表格（保持不变）
+            tableBody.innerHTML = '';
+            result.data.forEach(item => {
+                const row = document.createElement('tr');
+                config.tableColumns.forEach(col => {
+                    const td = document.createElement('td');
+                    if (col.key === 'operate') {
+                        td.innerHTML = `
+                            <button class="btn btn-sm btn-primary" onclick="openEditModal(${item[config.primaryKey]})">编辑</button>
+                            <button class="btn btn-sm btn-danger" onclick="openDeleteModal(${item[config.primaryKey]})">删除</button>
+                        `;
+                    } else {
+                        td.textContent = col.format ? col.format(item[col.key]) : item[col.key] || '';
+                    }
+                    row.appendChild(td);
+                });
+                tableBody.appendChild(row);
+            });
+
+            // 渲染分页
+            const totalPages = Math.ceil(result.total / 15);
+            pageNumberContainer.innerHTML = '';
+
+            // 上一页按钮状态
+            prevPageBtn.disabled = page <= 1;
+            prevPageBtn.onclick = () => page > 1 && loadData(page - 1);
+
+            // 下一页按钮状态
+            nextPageBtn.disabled = page >= totalPages;
+            nextPageBtn.onclick = () => page < totalPages && loadData(page + 1);
+
+            // 首页按钮
+            const firstPageBtn = document.createElement('button');
+            firstPageBtn.className = 'btn btn-sm btn-outline-secondary';
+            firstPageBtn.textContent = '首页';
+            firstPageBtn.disabled = page === 1;
+            firstPageBtn.onclick = () => loadData(1);
+            pageNumberContainer.appendChild(firstPageBtn);
+
+            // 计算显示的页码范围（当前页±2，且不小于1、不大于总页数）
+            const startPage = Math.max(1, page - 2);
+            const endPage = Math.min(totalPages, page + 2);
+
+            // 显示中间页码
+            for (let i = startPage; i <= endPage; i++) {
+                const pageBtn = document.createElement('button');
+                pageBtn.className = `btn btn-sm ${i === page ? 'btn-secondary' : 'btn-outline-secondary'}`;
+                pageBtn.textContent = i;
+                pageBtn.style.minWidth = '30px';
+                pageBtn.onclick = () => loadData(i);
+                pageNumberContainer.appendChild(pageBtn);
+            }
+
+            // 尾页按钮
+            const lastPageBtn = document.createElement('button');
+            lastPageBtn.className = 'btn btn-sm btn-outline-secondary';
+            lastPageBtn.textContent = '尾页';
+            lastPageBtn.disabled = page === totalPages;
+            lastPageBtn.onclick = () => loadData(totalPages);
+            pageNumberContainer.appendChild(lastPageBtn);
+
+            // 显示/隐藏空数据提示
+            document.getElementById('emptyTip').classList.add('d-none');
+        } else {
+            tableBody.innerHTML = '';
+            document.getElementById('emptyTip').classList.remove('d-none');
+            pageNumberContainer.innerHTML = '';
+            prevPageBtn.disabled = true;
+            nextPageBtn.disabled = true;
         }
-
-        tableBody.innerHTML = dataList.map(item => {
-            const cells = columns.map(col => {
-                if (col.key === 'operate') {
-                    // 操作按钮使用btn-sm适配CSS中.btn-sm样式
-                    return `
-                        <td>
-                            <button class="btn btn-primary btn-sm me-2" onclick="openEditModal(${item[primaryKey]})">编辑</button>
-                            <button class="btn btn-danger btn-sm" onclick="openDeleteModal(${item[primaryKey]})">删除</button>
-                        </td>
-                    `;
-                }
-                const value = item[col.key] || '-';
-                return `<td>${col.format ? col.format(value) : value}</td>`;
-            }).join('');
-            return `<tr>${cells}</tr>`;
-        }).join('');
-    }
-
-    /**
-     * 渲染分页（完全适配CSS中pagination相关样式）
-     */
-    function renderPagination() {
-        const paginationEl = document.getElementById('pagination');
-        if (!paginationEl) return;
-
-        const totalPages = Math.ceil(totalCount / pageSize);
-        if (totalCount === 0 || totalPages <= 1) {
-            paginationEl.innerHTML = "";
-            return;
-        }
-
-        let paginationHtml = `
-            <nav aria-label="分页导航">
-                <ul class="pagination">
-                    <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
-                        <a class="page-link" href="javascript:;" onclick="changePage(${currentPage - 1})">上一页</a>
-                    </li>
+    } catch (error) {
+        console.error('加载数据失败:', error);
+        tableBody.innerHTML = '';
+        document.getElementById('emptyTip').classList.remove('d-none');
+        document.getElementById('emptyTip').innerHTML = `
+            <i class="bi bi-exclamation-circle text-danger fs-3"></i>
+            <p class="text-danger mt-2">加载失败，请重试</p>
         `;
-
-        const startPage = Math.max(1, currentPage - 2);
-        const endPage = Math.min(totalPages, currentPage + 2);
-
-        if (startPage > 1) {
-            paginationHtml += `
-                <li class="page-item ${currentPage === 1 ? 'active' : ''}">
-                    <a class="page-link" href="javascript:;" onclick="changePage(1)">1</a>
-                </li>
-                ${startPage > 2 ? '<li class="page-item disabled"><a class="page-link">...</a></li>' : ''}
-            `;
-        }
-
-        for (let i = startPage; i <= endPage; i++) {
-            paginationHtml += `
-                <li class="page-item ${currentPage === i ? 'active' : ''}">
-                    <a class="page-link" href="javascript:;" onclick="changePage(${i})">${i}</a>
-                </li>
-            `;
-        }
-
-        if (endPage < totalPages) {
-            paginationHtml += `
-                ${endPage < totalPages - 1 ? '<li class="page-item disabled"><a class="page-link">...</a></li>' : ''}
-                <li class="page-item ${currentPage === totalPages ? 'active' : ''}">
-                    <a class="page-link" href="javascript:;" onclick="changePage(${totalPages})">${totalPages}</a>
-                </li>
-            `;
-        }
-
-        paginationHtml += `
-                    <li class="page-item disabled">
-                        <a class="page-link" href="javascript:;">共 ${totalCount} 条 / ${totalPages} 页</a>
-                    </li>
-                    <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
-                        <a class="page-link" href="javascript:;" onclick="changePage(${currentPage + 1})">下一页</a>
-                    </li>
-                </ul>
-            </nav>
-        `;
-
-        paginationEl.innerHTML = paginationHtml;
     }
+}
 
-    /**
-     * 绑定事件
-     */
-    function bindEvents() {
-        // 切换POI类型
-        document.getElementById('poiType').addEventListener('change', function() {
-            currentPoiType = this.value;
-            currentPage = 1;
-            initTableHeader();
-            loadData(1, pageSize);
-        });
+// 初始化页面（调整分页按钮绑定）
+document.addEventListener('DOMContentLoaded', () => {
+    // 原绑定逻辑保持不变...
 
-        // 搜索框回车事件
-        document.getElementById('searchInput').addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') searchData();
-        });
-    }
+    // 分页按钮初始禁用
+    document.getElementById('prevPageBtn').disabled = true;
+    document.getElementById('nextPageBtn').disabled = true;
+});
 
-    /**
-     * 切换页码
-     */
-    window.changePage = function(page) {
-        const totalPages = Math.ceil(totalCount / pageSize);
-        if (page < 1 || page > totalPages) return;
-        const keyword = document.getElementById('searchInput').value.trim();
-        loadData(page, pageSize, keyword);
-    };
+// 打开新增模态框
+function openAddModal() {
+    currentEditId = null;
+    const config = POI_CONFIG[currentPoiType];
+    const modalTitle = document.getElementById('editModalLabel');
+    const formEl = document.getElementById('editForm');
 
-    /**
-     * 搜索数据
-     */
-    window.searchData = function() {
-        const keyword = document.getElementById('searchInput').value.trim();
-        loadData(1, pageSize, keyword);
-    };
+    modalTitle.textContent = `新增${config.label}`;
+    formEl.innerHTML = '';
 
-    /**
-     * 打开新增模态框（适配CSS中form和modal样式）
-     */
-    window.openAddModal = function() {
-        currentEditId = null;
-        const config = POI_CONFIG[currentPoiType];
-        const formEl = document.getElementById('dataForm');
-        const modalTitle = document.getElementById('modalTitle');
-
-        modalTitle.textContent = `新增${config.label}`;
-        formEl.reset();
-        // 渲染表单字段（适配CSS中form-label和form-control样式）
-        formEl.innerHTML = config.fields.map(field => `
+    // 渲染表单字段
+    config.formFields.forEach(field => {
+        formEl.innerHTML += `
             <div class="mb-3">
-                <label for="${field.name}" class="form-label">${field.label}${field.required ? '<span class="text-danger">*</span>' : ''}</label>
-                <input type="${field.type}" class="form-control" id="${field.name}" name="${field.name}" 
-                    ${field.step ? `step="${field.step}"` : ''} 
-                    ${field.required ? 'required' : ''}>
+                <label for="form-${field.key}" class="form-label">
+                    ${field.label} ${field.required ? '<span class="text-danger">*</span>' : ''}
+                </label>
+                ${field.type === 'textarea' ? 
+                    `<textarea class="form-control" id="form-${field.key}" 
+                              ${field.required ? 'required' : ''}
+                              placeholder="${field.placeholder || ''}"
+                              rows="4"></textarea>` : 
+                    `<input type="${field.type}" class="form-control" id="form-${field.key}" 
+                           ${field.required ? 'required' : ''}
+                           placeholder="${field.placeholder || ''}"
+                           value="${field.defaultValue || ''}">`
+                }
             </div>
-        `).join('');
+        `;
+    });
 
-        dataModal.show();
-    };
+    $('#editModal').modal('show');
+}
 
-    /**
-     * 打开编辑模态框
-     */
-    window.openEditModal = async function(id) {
-        currentEditId = id;
-        const config = POI_CONFIG[currentPoiType];
-        const formEl = document.getElementById('dataForm');
-        const modalTitle = document.getElementById('modalTitle');
+// 打开编辑模态框
+async function openEditModal(id) {
+    currentEditId = id;
+    const config = POI_CONFIG[currentPoiType];
+    const modalTitle = document.getElementById('editModalLabel');
+    const formEl = document.getElementById('editForm');
 
-        try {
-            const response = await fetch(`${config.apiPrefix}/${id}`);
-            const result = await response.json();
-            if (result.code !== 200) throw new Error(result.msg);
+    modalTitle.textContent = `编辑${config.label}`;
+    formEl.innerHTML = '';
+
+    try {
+        const response = await fetch(`${config.apiPrefix}/get?id=${id}`);
+        const result = await response.json();
+
+        if (result.code === 200 && result.data) {
             const data = result.data;
 
-            modalTitle.textContent = `编辑${config.label}`;
-            // 渲染表单并填充数据
-            formEl.innerHTML = config.fields.map(field => {
-                const value = data[field.name] || '';
-                return `
+            // 渲染表单字段
+            config.formFields.forEach(field => {
+                const value = data[field.key] !== undefined ? data[field.key] : field.defaultValue || '';
+                // 坐标字段特殊处理（转为JSON字符串显示）
+                const displayValue = field.key === 'coordinates' ? JSON.stringify(value) : value;
+
+                formEl.innerHTML += `
                     <div class="mb-3">
-                        <label for="${field.name}" class="form-label">${field.label}${field.required ? '<span class="text-danger">*</span>' : ''}</label>
-                        <input type="${field.type}" class="form-control" id="${field.name}" name="${field.name}" 
-                            value="${value}" ${field.step ? `step="${field.step}"` : ''} 
-                            ${field.required ? 'required' : ''}>
+                        <label for="form-${field.key}" class="form-label">
+                            ${field.label} ${field.required ? '<span class="text-danger">*</span>' : ''}
+                        </label>
+                        ${field.type === 'textarea' ? 
+                            `<textarea class="form-control" id="form-${field.key}" 
+                                      ${field.required ? 'required' : ''}
+                                      placeholder="${field.placeholder || ''}"
+                                      rows="4">${displayValue}</textarea>` : 
+                            `<input type="${field.type}" class="form-control" id="form-${field.key}" 
+                                   ${field.required ? 'required' : ''}
+                                   placeholder="${field.placeholder || ''}"
+                                   value="${displayValue}">`
+                        }
                     </div>
                 `;
-            }).join('');
+            });
 
-            dataModal.show();
-        } catch (error) {
-            console.error("加载编辑数据失败：", error);
-            alert("加载数据失败，请重试");
+            $('#editModal').modal('show');
+        } else {
+            alert(result.msg || '获取数据失败');
         }
-    };
+    } catch (error) {
+        console.error('获取数据失败:', error);
+        alert('获取数据失败，请重试');
+    }
+}
 
-    /**
-     * 提交表单（新增/编辑）
-     */
-    window.submitForm = async function() {
-        const formEl = document.getElementById('dataForm');
-        if (!formEl.checkValidity()) {
-            formEl.reportValidity();
+// 提交表单（新增/编辑）
+async function submitForm() {
+    const config = POI_CONFIG[currentPoiType];
+    const formData = {};
+    let isValid = true;
+
+    // 收集表单数据并验证必填项
+    config.formFields.forEach(field => {
+        const el = document.getElementById(`form-${field.key}`);
+        const value = el.value.trim();
+
+        if (field.required && !value) {
+            isValid = false;
+            el.classList.add('is-invalid');
             return;
         }
+        el.classList.remove('is-invalid');
 
-        const formData = new FormData(formEl);
-        const data = Object.fromEntries(formData.entries());
-        const config = POI_CONFIG[currentPoiType];
-
-        try {
-            let response;
-            if (currentEditId) {
-                // 编辑
-                response = await fetch(`${config.apiPrefix}/${currentEditId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                });
+        // 处理数据类型
+        if (value !== '') {
+            if (field.type === 'number') {
+                formData[field.key] = parseFloat(value);
+            } else if (field.key === 'coordinates') {
+                // 解析坐标JSON（修复空间数据提交问题）
+                try {
+                    formData[field.key] = JSON.parse(value);
+                } catch (e) {
+                    isValid = false;
+                    el.classList.add('is-invalid');
+                    alert(`坐标格式错误：${e.message}`);
+                }
             } else {
-                // 新增
-                response = await fetch(`${config.apiPrefix}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                });
+                formData[field.key] = value;
             }
-
-            const result = await response.json();
-            if (result.code !== 200) throw new Error(result.msg);
-
-            alert(result.msg);
-            dataModal.hide();
-            // 刷新数据
-            const keyword = document.getElementById('searchInput').value.trim();
-            loadData(currentPage, pageSize, keyword);
-        } catch (error) {
-            console.error("提交失败：", error);
-            alert("提交失败：" + error.message);
         }
-    };
+    });
 
-    /**
-     * 打开删除模态框
-     */
-    window.openDeleteModal = function(id) {
-        currentEditId = id;
-        deleteModal.show();
-    };
+    if (!isValid) return;
 
-    /**
-     * 确认删除
-     */
-    window.confirmDelete = async function() {
-        const config = POI_CONFIG[currentPoiType];
-        try {
-            const response = await fetch(`${config.apiPrefix}/${currentEditId}`, {
-                method: 'DELETE'
-            });
-            const result = await response.json();
-            if (result.code !== 200) throw new Error(result.msg);
+    // 添加主键（编辑时）
+    if (currentEditId) {
+        formData[config.primaryKey] = currentEditId;
+    }
 
-            alert(result.msg);
-            deleteModal.hide();
-            // 刷新数据
-            const keyword = document.getElementById('searchInput').value.trim();
-            const totalPages = Math.ceil(totalCount / pageSize);
-            if (currentPage > 1 && document.querySelectorAll('#tableBody tr').length === 1) {
-                loadData(currentPage - 1, pageSize, keyword);
-            } else {
-                loadData(currentPage, pageSize, keyword);
-            }
-        } catch (error) {
-            console.error("删除失败：", error);
-            alert("删除失败：" + error.message);
+    try {
+        const url = currentEditId 
+            ? `${config.apiPrefix}/update` 
+            : `${config.apiPrefix}/add`;
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(formData)
+        });
+
+        const result = await response.json();
+        if (result.code === 200) {
+            alert(currentEditId ? '更新成功' : '新增成功');
+            $('#editModal').modal('hide');
+            loadData(currentPage);
+        } else {
+            alert(result.msg || '操作失败');
         }
-    };
-});
+    } catch (error) {
+        console.error('提交失败:', error);
+        alert('提交失败，请重试');
+    }
+}
+
+// 打开删除模态框
+function openDeleteModal(id) {
+    currentDeleteId = id;
+    const config = POI_CONFIG[currentPoiType];
+    document.getElementById('deleteConfirmText').textContent = 
+        `确定要删除ID为${id}的${config.label}数据吗？`;
+    $('#deleteModal').modal('show');
+}
+
+// 确认删除
+async function confirmDelete() {
+    if (!currentDeleteId) return;
+
+    const config = POI_CONFIG[currentPoiType];
+    try {
+        const response = await fetch(`${config.apiPrefix}/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ [config.primaryKey]: currentDeleteId })
+        });
+
+        const result = await response.json();
+        if (result.code === 200) {
+            alert('删除成功');
+            $('#deleteModal').modal('hide');
+            loadData(currentPage);
+        } else {
+            alert(result.msg || '删除失败');
+        }
+    } catch (error) {
+        console.error('删除失败:', error);
+        alert('删除失败，请重试');
+    }
+}
